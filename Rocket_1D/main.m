@@ -5,7 +5,7 @@ addpath('../');
 
 % Lets say I want to move a rocket to 50km altitude in 120seconds
 
-N_knots = 30;
+N_knots = 50;
 % height, velocity, mass
 N_states = 3;
 % thrust
@@ -13,57 +13,69 @@ N_inputs = 1;
 
 tf = 120;
 t = linspace(0, tf, N_knots);
-x1_f = 50e3;
+xd = 50e3;
 IC = [0 0 425e3];
 
-method = 'Trapezoidal';
-if method == 'Trapezoidal'
-  dim = (N_states+N_inputs)*N_knots;
-end
+dim = (N_states+N_inputs)*N_knots;
 
-lb_states = [zeros(N_knots,1), zeros(N_knots,1), 25e3.*ones(N_knots,1)];
-ub_states = [inf(N_knots,1), inf(N_knots,1), IC(3).*ones(N_knots,1)];
+lb_states = [-inf(N_knots,1), -inf(N_knots,1), 25e3.*ones(N_knots,1)];
+ub_states = [inf(N_knots,1), inf(N_knots,1), inf(N_knots,1)];
 lb_inputs = zeros(N_knots,1);
 ub_inputs = 8e6.*ones(N_knots,1);
 
 ic_states = [zeros(N_knots,1), zeros(N_knots,1), IC(3).*ones(N_knots,1)];
-ic_inputs = ub_inputs;
+ic_inputs = 0.75*ub_inputs;
 
 [states_guess, inputs_guess] = build_traj(t, ic_states(1,:), ic_inputs);
 
+% We dont pack slack
+X0 = pack_trap(states_guess, inputs_guess, []);
+lb = pack_trap(lb_states, lb_inputs, []);
+ub = pack_trap(ub_states, ub_inputs, []);
 
-X0 = pack_trap(states_guess, inputs_guess);
-lb = pack_trap(lb_states, lb_inputs);
-ub = pack_trap(ub_states, ub_inputs);
-for i = 1:dim
-  if X0(i) < lb(i)
-    disp(['State ' num2str(i) ' Violates lower bound of ' num2str(lb(i))]);
-  elseif X0(i) > ub(i)
-    disp(['State ' num2str(i) ' Violates upper bound of ' num2str(ub(i))]);
-  endif
-endfor
+ub_index = [];
+lb_index = [];
+slack_vars = [];
 
-[ineq, eq] = constraints_trap(X0, t, N_states, N_inputs, IC);
+for i = 1:length(lb)
+  if lb(i) ~= -inf
+    lb_index = [lb_index i];
+    slack_vars = [slack_vars X0(i)-lb(i)];
+  end
+end
+
+for i = 1:length(ub)
+  if ub(i) ~= inf
+    ub_index = [ub_index i];
+    slack_vars = [slack_vars ub(i)-X0(i)];
+  end
+end
+X0 = pack_trap(states_guess, inputs_guess, slack_vars);
+
+cons = struct('N_knots', N_knots, 'N_states', N_states, 'N_inputs', N_inputs, 'N_sv', length(slack_vars),...
+              't', t, 'IC', IC, 'lb', lb, 'ub', ub, 'lb_index', lb_index, 'ub_index', ub_index, 'xd', xd);
+
+[ineq, eq, Jac] = constraints_trap(X0, cons);
 
 tic
-[x_opt2, J2] = fmincon(@(x)cost_step1(x, N_knots), X0, [], [], [], [], lb, ub, @(x)constraints_trap(x, t, N_states, N_inputs, IC));
+[x_opt, J] = kkt(@(x)cost(x, cons), X0, cons, @(x)constraints_trap(x, cons), true, true);
 toc
 
-[states_2, inputs_2] = unpack_trap(x_opt2, N_knots, N_states, N_inputs);
+[states, inputs] = unpack_trap(x_opt, N_knots, N_states, N_inputs);
 
 figure(1)
 subplot(3,1,1)
 plot(t, states_guess(:,1))
 hold on
-plot(t, states_2(:,1))
+plot(t, states(:,1))
 legend('First pass', 'Second pass')
 
 subplot(3,1,2)
 plot(t, states_guess(:,2))
 hold on
-plot(t, states_2(:,2))
+plot(t, states(:,2))
 
 subplot(3,1,3)
 plot(t, inputs_guess(:,1))
 hold on
-plot(t, inputs_2(:,1))
+plot(t, inputs(:,1))

@@ -5,63 +5,64 @@ addpath('../');
 
 % Lets say I want to move a block 2 meters in 2 seconds and have zero speed at 2 seconds
 
-N_knots = 10;
+N_knots = 20;
 N_states = 2;
 N_inputs = 1;
 tf = 10;
 t = linspace(0, tf, N_knots);
-x1_f = 2.0;
-x2_f = 0.0;
 IC = [0 0];
+xd = [2 0];
 
-method = 'Trapezoidal';
-if method == 'Trapezoidal'
-  dim = (N_states+N_inputs)*N_knots;
+dim = (N_states+N_inputs)*N_knots;
+state_lb = [-inf(N_knots,1) -inf(N_knots,1)];
+input_lb = [-2000*ones(N_knots,1)];
+state_ub = [inf(N_knots,1) inf(N_knots,1)];
+input_ub = [2000*ones(N_knots,1)];
+
+ic_states = [zeros(N_knots,1), zeros(N_knots,1)];
+ic_inputs = zeros(N_knots,1);
+
+X0 = pack_trap(ic_states, ic_inputs, []);
+ub = pack_trap(state_ub, input_ub, []);
+lb = pack_trap(state_lb, input_lb, []);
+
+ub_index = [];
+lb_index = [];
+slack_vars = [];
+
+for i = 1:length(lb)
+  if lb(i) ~= -inf
+    lb_index = [lb_index i];
+    slack_vars = [slack_vars X0(i)-lb(i)];
+  end
 end
 
-X0 = zeros(dim, 1);
-lb = -inf(dim,1);
-ub = inf(dim,1);
-
-if method == 'Trapezoidal'
-  tic
-  [x_opt1, J] = fmincon(@(x)cost_step1(x, N_knots), X0, [], [], [], [], lb, ub, @(x)constraints_trap(x, t, N_states, N_inputs, IC));
-  toc
+for i = 1:length(ub)
+  if ub(i) ~= inf
+    ub_index = [ub_index i];
+    slack_vars = [slack_vars ub(i)-X0(i)];
+  end
 end
-[states_1, inputs_1] = unpack_trap(x_opt1, N_knots, N_states, N_inputs);
+X0 = pack_trap(ic_states, ic_inputs, slack_vars);
 
-error_x1 = x1_f - x_opt1(N_knots);
-error_x2 = x2_f - x_opt1(2*N_knots);
+cons = struct('N_knots', N_knots, 'N_states', N_states, 'N_inputs', N_inputs, 'N_sv', length(slack_vars),...
+              't', t, 'IC', IC, 'lb', lb, 'ub', ub, 'lb_index', lb_index, 'ub_index', ub_index, 'xd', xd);
+[ineq, eq, Jac] = constraints_trap(X0, cons);
 
-x1_error_threshold = 0.1;
-x2_error_threshold = 0.1;
-
-if abs(error_x1) < x1_error_threshold && abs(error_x2) < x2_error_threshold
-  lb(N_knots) = x1_f - x1_error_threshold;
-  ub(N_knots) = x1_f + x1_error_threshold;
-  lb(2*N_knots) = x2_f - x2_error_threshold;
-  ub(2*N_knots) = x2_f + x2_error_threshold;
-
-  tic
-  [x_opt2, J2] = fmincon(@(x)cost_step2(x, N_knots), x_opt1, [], [], [], [], lb, ub, @(x)constraints_trap(x, t, N_states, N_inputs, IC));
-  toc
-end
-
-[states_2, inputs_2] = unpack_trap(x_opt2, N_knots, N_states, N_inputs);
+tic
+[x_opt, J] = kkt(@(x)cost(x, cons), X0, cons, @(x)constraints_trap(x, cons), true, true);
+toc
+[states, inputs] = unpack_trap(x_opt, N_knots, N_states, N_inputs);
 
 figure(1)
 subplot(3,1,1)
-plot(t, states_1(:,1))
-hold on
-plot(t, states_2(:,1))
-legend('First pass', 'Second pass')
+plot(t, states(:,1), 'LineWidth', 1.5)
+ylabel('Position')
 
 subplot(3,1,2)
-plot(t, states_1(:,2))
-hold on
-plot(t, states_2(:,2))
+plot(t, states(:,2), 'LineWidth', 1.5)
+ylabel('Velocity')
 
 subplot(3,1,3)
-plot(t, inputs_1(:,1))
-hold on
-plot(t, inputs_2(:,1))
+plot(t, inputs(:,1), 'LineWidth', 1.5)
+ylabel('Acceleration')
