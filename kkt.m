@@ -62,7 +62,7 @@ function [z_opt, cost_opt] = kkt(cost_func, z0, cons, constraints, analytical_ja
       [~, eq_new, ~] = constraints(z_new);
       delta_c = eq_new - eq;
       J_new = J + ((delta_c - J*s)*s')./(s'*s);
-    endif
+    end
     [~, grad_new, ~] = cost_func(z_new);
 
     if analytical_hes
