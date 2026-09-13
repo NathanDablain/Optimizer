@@ -6,9 +6,6 @@
 #include <string.h>
 #include "LU.h"
 
-typedef uint_fast8_t fast8; 
-typedef uint_fast16_t fast16; 
-
 void Run_SQP();
 void Load_Problem_Data();
 void Load_Jacobian();
@@ -17,6 +14,7 @@ void Load_Equalities();
 void Load_Gradient();
 double Select_Alpha(double *delta_z);
 double Get_Cost(double *z);
+void Reset_L();
 
 #define N_STATES 2
 #define N_INPUTS 1
@@ -55,13 +53,18 @@ int P[SYSTEM_SIZE];
 int P_max[SYSTEM_SIZE];
 
 int Row_nz[SYSTEM_SIZE];
-int Col_nz[SYSTEM_SIZE];
-int Col_nz_fw[SYSTEM_SIZE];
-int **Stop_rows;
+int Col_nz_U[SYSTEM_SIZE];
+int Col_nz_L[SYSTEM_SIZE];
+
+int **Row_ids;
 // These are the column indices for each row above the diagonal (elimination, backwards substitution)
-int **Stop_cols;
+int **Col_ids_U;
 // These are the column indices for each row below the diagonal (forwards substitution)
-int **Stop_cols_fw;
+int **Col_ids_L;
+// Lower factorization of A
+double **A_L;
+// Upper factorization of A, includes diagonal
+double **A_U;
 
 typedef struct{
     double dx[N_KNOTS][N_STATES];
@@ -70,7 +73,7 @@ params knot_params = {0};
 struct timespec time_load, time_elim, time_subs, time_extract, time_alpha, time_update;
 
 int main(){
-    fast16 i, j;
+    int i, j;
     struct timespec time_start, time_end;
 
     // Fill t and h
@@ -101,34 +104,36 @@ int main(){
 
     // Find Pivots and Extents
     Load_Problem_Data();
-    Get_Pivots_Extents(A, SYSTEM_SIZE, 1.0e-20, P, P_max, Row_nz, Col_nz, Col_nz_fw);
+    Get_Pivots_Extents(A, SYSTEM_SIZE, 1.0e-20, P, P_max, Row_nz, Col_nz_U, Col_nz_L);
     for (i = 0; i < SYSTEM_SIZE; i++){
         memset(A[i], 0, SYSTEM_SIZE*sizeof(double));
     }
 
     // Allocate stop indices
-    Stop_rows = malloc(SYSTEM_SIZE*sizeof(int*));
-    if (Stop_rows == NULL) return 0;
+    Row_ids = malloc(SYSTEM_SIZE*sizeof(int*));
+    if (Row_ids == NULL) return 0;
     for (i = 0; i < SYSTEM_SIZE; i++){
-        Stop_rows[i] = malloc(Row_nz[i]*sizeof(int));
-        if (Stop_rows[i] == NULL) return 0;
+        Row_ids[i] = malloc(Row_nz[i]*sizeof(int));
+        if (Row_ids[i] == NULL) return 0;
     }
-    Stop_cols = malloc(SYSTEM_SIZE*sizeof(int*));
-    if (Stop_cols == NULL) return 0;
+
+    Col_ids_U = malloc(SYSTEM_SIZE*sizeof(int*));
+    A_U = malloc(SYSTEM_SIZE*sizeof(double*));
     for (i = 0; i < SYSTEM_SIZE; i++){
-        Stop_cols[i] = malloc(Col_nz[i]*sizeof(int));
-        if (Stop_cols[i] == NULL) return 0;
+        Col_ids_U[i] = malloc(Col_nz_U[i]*sizeof(int));
+        A_U[i] = malloc((Col_nz_U[i]+1)*sizeof(double));
     }
-    Stop_cols_fw = malloc(SYSTEM_SIZE*sizeof(int*));
-    if (Stop_cols_fw == NULL) return 0;
+
+    Col_ids_L = malloc(SYSTEM_SIZE*sizeof(int*));
+    A_L = malloc(SYSTEM_SIZE*sizeof(double*));
     for (i = 0; i < SYSTEM_SIZE; i++){
-        Stop_cols_fw[i] = malloc(Col_nz_fw[i]*sizeof(int));
-        if (Stop_cols_fw[i] == NULL) return 0;
+        Col_ids_L[i] = malloc(Col_nz_L[i]*sizeof(int));
+        A_L[P[i]] = malloc(Col_nz_L[i]*sizeof(double));
     }
 
     // Find stop indices
     Load_Problem_Data();
-    Get_Stops(A, SYSTEM_SIZE, P_max, Row_nz, Col_nz, Col_nz_fw, Stop_rows, Stop_cols, Stop_cols_fw);
+    Get_Stops(A, SYSTEM_SIZE, P_max, Row_ids, Col_ids_U, Col_ids_L);
     for (i = 0; i < SYSTEM_SIZE; i++){
         memset(A[i], 0, SYSTEM_SIZE*sizeof(double));
     }
@@ -143,20 +148,24 @@ int main(){
     // Free A
     for (i = 0; i < SYSTEM_SIZE; i++){
         free(A[i]);
-        free(Stop_rows[i]);
-        free(Stop_cols[i]);
-        free(Stop_cols_fw[i]);
+        free(Row_ids[i]);
+        free(Col_ids_U[i]);
+        free(Col_ids_L[i]);
+        free(A_L[i]);
+        free(A_U[i]);
     }
     free(A);
-    free(Stop_rows);
-    free(Stop_cols);
-    free(Stop_cols_fw);
+    free(Row_ids);
+    free(Col_ids_U);
+    free(Col_ids_L);
+    free(A_L);
+    free(A_U);
 
     // Log data
     if (plot_flag){
         FILE *log = fopen("Block1D_log.txt", "w");
         for (i = 0; i < N_KNOTS; i++){
-            fast16 offset_z = i*KNOT_SIZE;
+            int offset_z = i*KNOT_SIZE;
             fprintf(log, "%6.3f  %6.3f  %6.3f  %6.3f\n", t[i], z[offset_z], z[offset_z+1], z[offset_z+2]);
         }
         fclose(log);
@@ -185,21 +194,30 @@ void Run_SQP(){
     double delta_z[N_DECISION_VARIABLES];
     double lambda_new[N_CONSTRAINTS];
     double delta_lambda[N_CONSTRAINTS];
-    const fast16 max_iterations = 2;
-    fast16 i, iterations;
+    const int max_iterations = 2;
+    int i, iterations;
     
     for (iterations = 0; iterations < max_iterations; iterations++){
         // Load A and b matrices
+        // for (i = 0; i < SYSTEM_SIZE; i++)
+            // memset(A[i], 0, SYSTEM_SIZE*sizeof(double));
         Load_Problem_Data();
         timespec_get(&time_load, TIME_UTC);
 
         // Setup A in form A=(L-E)+U by partial pivoting and eliminating
-        // (void)LUPDecompose(A, SYSTEM_SIZE, P_max, E, E_c, S_c);
-        (void)LUPDecompose2(A, SYSTEM_SIZE, P_max, Row_nz, Col_nz, Stop_rows, Stop_cols);
+        (void)LUDecompose(A, SYSTEM_SIZE, P_max,
+                            Row_nz, Row_ids,
+                            Col_nz_U, Col_ids_U,
+                            A_L, A_U);
         timespec_get(&time_elim, TIME_UTC);
 
         // Perform forward and backward substitution to solve for x
-        LUPSolve(A, P, b, SYSTEM_SIZE, x, Col_nz, Stop_cols, Col_nz_fw, Stop_cols_fw);
+        LUPSolve(A, P, b, SYSTEM_SIZE, x,
+                Col_nz_U, Col_ids_U,
+                Col_nz_L, Col_ids_L,
+                A_L, A_U);
+        // Need to swap back A_L after solving so it is ready for next iteration
+        Reset_L();
         timespec_get(&time_subs, TIME_UTC);
 
         // Extract change in decision variables and new lagrange multipliers from x
@@ -224,6 +242,25 @@ void Run_SQP(){
     }
 }
 
+void Reset_L(){
+    double *ptr;
+    int i, j;
+    int P_temp[SYSTEM_SIZE];
+    memcpy(P_temp, P, SYSTEM_SIZE*sizeof(int));
+
+    for (i = 0; i < SYSTEM_SIZE; i++){
+        while(P_temp[i] != i){
+            j = P_temp[i];
+            P_temp[i] = P_temp[j];
+            P_temp[j] = j;
+
+            ptr = A_L[i];
+            A_L[i] = A_L[j];
+            A_L[j] = ptr;
+        }
+    }
+}
+
 double First_Knot_Cost(double *z_knot){
     double contribution = -mu*(log(z_knot[3]) + log(z_knot[4]));
     return contribution;
@@ -240,7 +277,7 @@ double End_Knot_Cost(double *z_knot){
 }
 
 double Get_Cost(double *z){
-    fast16 i, offset_z;
+    int i, offset_z;
     double cost = 0;
 
     offset_z = 0;
@@ -262,7 +299,7 @@ double Select_Alpha(double *delta_z){
     double alpha_check;
     double alpha = 1.0;
     const double tau = 0.995;
-    fast16 i, offset_z;
+    int i, offset_z;
     // First check the maximum alpha that will keep our slack variables positive
     for (i = 0; i < N_DECISION_VARIABLES; i++)
         z_new[i] = z[i] + delta_z[i];
@@ -289,8 +326,8 @@ double Select_Alpha(double *delta_z){
     double amid1, amid2, cost1, cost2;
     double zmid1[N_DECISION_VARIABLES];
     double zmid2[N_DECISION_VARIABLES];
-    fast16 j;
-    const fast16 max_ternary = 12;
+    int j;
+    const int max_ternary = 12;
     for (i = 0; i < max_ternary; i++){
         amid1 = alow + (1.0/3.0)*(ahigh - alow);
         amid2 = alow + (2.0/3.0)*(ahigh - alow);
@@ -329,10 +366,10 @@ void Load_Problem_Data(){
     Load_Hessian();
 }
 
-void First_Knot_Jacobian(fast16 knot, fast16 offset_z, fast16 offset_c){
-    fast16 i = N_DECISION_VARIABLES;
-    fast16 j = i + offset_c;
-    fast16 k = offset_z;
+void First_Knot_Jacobian(int knot, int offset_z, int offset_c){
+    int i = N_DECISION_VARIABLES;
+    int j = i + offset_c;
+    int k = offset_z;
     const double c1 = -h[knot] / 2.0;
 
     A[j][k] = -1.0;
@@ -370,10 +407,10 @@ void First_Knot_Jacobian(fast16 knot, fast16 offset_z, fast16 offset_c){
     A[k+1][j+5] = A[j+5][k+1];
 }
 
-void Middle_Knot_Jacobian(fast16 knot, fast16 offset_z, fast16 offset_c){
-    fast16 i = N_DECISION_VARIABLES;
-    fast16 j = i + offset_c;
-    fast16 k = offset_z;
+void Middle_Knot_Jacobian(int knot, int offset_z, int offset_c){
+    int i = N_DECISION_VARIABLES;
+    int j = i + offset_c;
+    int k = offset_z;
     const double c1 = -h[knot] / 2.0;
 
     A[j][k] = -1.0;
@@ -406,10 +443,10 @@ void Middle_Knot_Jacobian(fast16 knot, fast16 offset_z, fast16 offset_c){
 
 }
 
-void End_Knot_Jacobian(fast16 knot, fast16 offset_z, fast16 offset_c){
-    fast16 i = N_DECISION_VARIABLES;
-    fast16 j = i + offset_c;
-    fast16 k = offset_z;
+void End_Knot_Jacobian(int knot, int offset_z, int offset_c){
+    int i = N_DECISION_VARIABLES;
+    int j = i + offset_c;
+    int k = offset_z;
 
     A[j][k+2] = -1.0;
     A[j][k+3] = 1.0;
@@ -424,7 +461,7 @@ void End_Knot_Jacobian(fast16 knot, fast16 offset_z, fast16 offset_c){
 }
 
 void Load_Jacobian(){
-    fast16 i, offset_z, offset_c;
+    int i, offset_z, offset_c;
     offset_z = 0;
     offset_c = 0;
     First_Knot_Jacobian(0, offset_z, offset_c);
@@ -440,22 +477,22 @@ void Load_Jacobian(){
     End_Knot_Jacobian(N_KNOTS-1, offset_z, offset_c);
 }
 
-void First_Knot_Hessian(fast16 knot, fast16 offset_z){
-    fast16 i = offset_z;
+void First_Knot_Hessian(int knot, int offset_z){
+    int i = offset_z;
     
     A[i+3][i+3] = mu / pow(z[i+3], 2);
     A[i+4][i+4] = mu / pow(z[i+4], 2);
 }
 
-void Middle_Knot_Hessian(fast16 knot, fast16 offset_z){
-    fast16 i = offset_z;
+void Middle_Knot_Hessian(int knot, int offset_z){
+    int i = offset_z;
     
     A[i+3][i+3] = mu / pow(z[i+3], 2);
     A[i+4][i+4] = mu / pow(z[i+4], 2);
 }
 
-void End_Knot_Hessian(fast16 knot, fast16 offset_z){
-    fast16 i = offset_z;
+void End_Knot_Hessian(int knot, int offset_z){
+    int i = offset_z;
     
     A[i][i] = 2.0;
     A[i+1][i+1] = 2.0;
@@ -464,7 +501,7 @@ void End_Knot_Hessian(fast16 knot, fast16 offset_z){
 }
 
 void Load_Hessian(){
-    fast16 i, offset_z;
+    int i, offset_z;
     offset_z = 0;
     First_Knot_Hessian(0, offset_z);
 
@@ -477,7 +514,7 @@ void Load_Hessian(){
     End_Knot_Hessian(N_KNOTS-1, offset_z);
 }
 
-void Get_Knot_Params(fast16 offset, fast16 knot){
+void Get_Knot_Params(int offset, int knot){
     double v = z[offset+1];
     double a = z[offset+2];
     
@@ -485,7 +522,7 @@ void Get_Knot_Params(fast16 offset, fast16 knot){
     knot_params.dx[knot][1] = a;
 }
 
-void First_Knot_Eq(fast16 knot, fast16 offset_z, fast16 offset_c){
+void First_Knot_Eq(int knot, int offset_z, int offset_c){
     // p1 = z[offset_z];
     // v1 = z[offset_z+1];
     // a1 = z[offset_z+2];
@@ -508,7 +545,7 @@ void First_Knot_Eq(fast16 knot, fast16 offset_z, fast16 offset_c){
     b[N_DECISION_VARIABLES+offset_c+5] = z[offset_z+1] - ic[1];
 }
 
-void Middle_Knot_Eq(fast16 knot, fast16 offset_z, fast16 offset_c){
+void Middle_Knot_Eq(int knot, int offset_z, int offset_c){
     // p1 = z[offset_z];
     // v1 = z[offset_z+1];
     // a1 = z[offset_z+2];
@@ -529,7 +566,7 @@ void Middle_Knot_Eq(fast16 knot, fast16 offset_z, fast16 offset_c){
 
 }
 
-void End_Knot_Eq(fast16 knot, fast16 offset_z, fast16 offset_c){
+void End_Knot_Eq(int knot, int offset_z, int offset_c){
     // p1 = z[offset_z];
     // v1 = z[offset_z+1];
     // a1 = z[offset_z+2];
@@ -543,7 +580,7 @@ void End_Knot_Eq(fast16 knot, fast16 offset_z, fast16 offset_c){
 }
 
 void Load_Equalities(){
-    fast16 i, offset_z, offset_c;
+    int i, offset_z, offset_c;
 
     for (i = 0; i < N_KNOTS; i++){
         offset_z = KNOT_SIZE*i;
@@ -565,17 +602,17 @@ void Load_Equalities(){
     End_Knot_Eq(N_KNOTS-1, offset_z, offset_c);
 }
 
-void First_Knot_Grad(fast16 offset){
+void First_Knot_Grad(int offset){
     b[offset+3] = mu / z[offset+3];
     b[offset+4] = mu / z[offset+4];
 }
 
-void Middle_Knot_Grad(fast16 offset){
+void Middle_Knot_Grad(int offset){
     b[offset+3] = mu / z[offset+3];
     b[offset+4] = mu / z[offset+4];
 }
 
-void End_Knot_Grad(fast16 offset){
+void End_Knot_Grad(int offset){
     b[offset] = 2.0*(xd[0] - z[offset]);
     b[offset+1] = 2.0*(xd[1] - z[offset+1]);
     b[offset+3] = mu / z[offset+3];
@@ -583,7 +620,7 @@ void End_Knot_Grad(fast16 offset){
 }
 
 void Load_Gradient(){
-    fast16 i, offset;
+    int i, offset;
 
     offset = 0;
     First_Knot_Grad(offset);
