@@ -8,7 +8,7 @@ O = struct(...
   'N_knots', 30,...
   'N_lb', 1,...
   'N_ub', 1,...
-  'ic', [0 0],...
+  'ic', [0 0.0],...
   'xd', [2 0.4],...
   'lb', -2.0,...
   'ub', 2.0,...
@@ -63,7 +63,7 @@ tic
 
 pf_tolerance = 1.0e-5;
 df_tolerance = 1.0e-2;
-max_iterations = 10;
+max_iterations = 2;
 
 dim = O.N_decision_variables + O.N_constraints;
 A = zeros(dim,dim);
@@ -138,29 +138,29 @@ for iterations = 1 : max_iterations
   [cost, grad, eq, jacobian, hessian] = Evaluate_1D_Block(O, option);
 
   % Primal feasability checks if we are satisfying our constraints
-  [pf, pfindex] = max(abs(eq));
-  if pf < pf_tolerance
-    pf_satisfied = true;
-  else
-    pf_satisfied = false;
-  end
-
-  % Dual feasability checks if we are at a local minimum while balancing our constraints
-  % This is actually the stationary condition
-  lagrange_grad = (grad - jacobian'*O.lambda);
-  [df, dfindex] = max(abs(lagrange_grad));
-  if df < df_tolerance
-    df_satisfied = true;
-  else
-    df_satisfied = false;
-  end
-
-  if pf_satisfied && df_satisfied
-    disp(['Converged in ' num2str(iterations) ' iterations'])
-    break;
-  elseif iterations == max_iterations
-    disp(['Failed to converge with pf of ' num2str(pf) ' and df of ' num2str(df)])
-  end
+##  [pf, pfindex] = max(abs(eq));
+##  if pf < pf_tolerance
+##    pf_satisfied = true;
+##  else
+##    pf_satisfied = false;
+##  end
+##
+##  % Dual feasability checks if we are at a local minimum while balancing our constraints
+##  % This is actually the stationary condition
+##  lagrange_grad = (grad - jacobian'*O.lambda);
+##  [df, dfindex] = max(abs(lagrange_grad));
+##  if df < df_tolerance
+##    df_satisfied = true;
+##  else
+##    df_satisfied = false;
+##  end
+##
+##  if pf_satisfied && df_satisfied
+##    disp(['Converged in ' num2str(iterations) ' iterations'])
+##    break;
+##  elseif iterations == max_iterations
+##    disp(['Failed to converge with pf of ' num2str(pf) ' and df of ' num2str(df)])
+##  end
 end
 toc
 

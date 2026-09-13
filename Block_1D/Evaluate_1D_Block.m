@@ -174,15 +174,20 @@ function jac_block = get_first_knot_jac(z_knot, t_knot, z_next, t_next)
   jac_block(1,2) = -h/2;
   jac_block(1,6) = 1;
   jac_block(1,7) = -h/2;
+
   jac_block(2,2) = -1;
   jac_block(2,3) = -h/2;
   jac_block(2,7) = 1;
   jac_block(2,8) = -h/2;
+
   jac_block(3,3) = -1;
   jac_block(3,4) = 1;
+
   jac_block(4,3) = 1;
   jac_block(4,5) = 1;
+
   jac_block(5,1) = -1;
+
   jac_block(6,2) = -1;
 
 end
@@ -195,12 +200,15 @@ function jac_block = get_middle_knot_jac(z_knot, t_knot, z_next, t_next)
   jac_block(1,2) = -h/2;
   jac_block(1,6) = 1;
   jac_block(1,7) = -h/2;
+
   jac_block(2,2) = -1;
   jac_block(2,3) = -h/2;
   jac_block(2,7) = 1;
   jac_block(2,8) = -h/2;
+
   jac_block(3,3) = -1;
   jac_block(3,4) = 1;
+
   jac_block(4,3) = 1;
   jac_block(4,5) = 1;
 end
@@ -210,6 +218,7 @@ function jac_block = get_end_knot_jac(z_knot, t_knot)
 
   jac_block(1,3) = -1;
   jac_block(1,4) = 1;
+  
   jac_block(2,3) = 1;
   jac_block(2,5) = 1;
 end
