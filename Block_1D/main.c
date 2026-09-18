@@ -7,14 +7,21 @@
 #include "LU.h"
 
 void Run_SQP();
-void Load_Problem_Data();
-void Load_Jacobian();
-void Load_Hessian();
+void Load_Problem_Data(int sparse);
+void Load_Jacobian(int sparse);
+void Load_Hessian(int sparse);
 void Load_Equalities();
 void Load_Gradient();
 double Select_Alpha(double *delta_z);
 double Get_Cost(double *z);
 void Reset_L();
+void Reset_A_S();
+void Load_First_Knot_Columns(int offset_z, int offset_c);
+void Load_Middle_Knot_Columns(int knot, int offset_z, int offset_c);
+void Load_End_Knot_Columns(int offset_z, int offset_c);
+void Fill_A_S_Zeros();
+void Parse_Checklist_S();
+void Convert_id_U_S();
 
 #define N_STATES 2
 #define N_INPUTS 1
@@ -24,7 +31,10 @@ void Reset_L();
 #define FIRST_KNOT_CONSTRAINTS 6
 #define MIDDLE_KNOT_CONSTRAINTS 4
 #define END_KNOT_CONSTRAINTS 2
-
+#define FIRST_KNOT_CONTRIBUTION (2*(14) + 2)
+#define MIDDLE_KNOT_CONTRIBUTION (2*(12) + 2)
+#define END_KNOT_CONTRIBUTION (2*(4) + 4)
+#define TOTAL_CONTRIBUTION (FIRST_KNOT_CONTRIBUTION + MIDDLE_KNOT_CONTRIBUTION*(N_KNOTS-2) + END_KNOT_CONTRIBUTION)
 #define KNOT_SIZE (N_STATES + N_INPUTS + N_LBS + N_UBS)
 #define N_DECISION_VARIABLES (N_KNOTS * KNOT_SIZE)
 #define N_CONSTRAINTS (FIRST_KNOT_CONSTRAINTS + MIDDLE_KNOT_CONSTRAINTS*(N_KNOTS-2) + END_KNOT_CONSTRAINTS)
@@ -52,25 +62,77 @@ double h[N_KNOTS-1] = {0};
 int P[SYSTEM_SIZE];
 int P_max[SYSTEM_SIZE];
 
-int Row_nz[SYSTEM_SIZE];
-int Col_nz_U[SYSTEM_SIZE];
-int Col_nz_L[SYSTEM_SIZE];
+int Row_nz[SYSTEM_SIZE] = {0};
+int Col_nz_U[SYSTEM_SIZE] = {0};
+int Col_nz_L[SYSTEM_SIZE] = {0};
+int Col_ic_S[SYSTEM_SIZE] = {0};
+int Col_nz_S[SYSTEM_SIZE] = {0};
+int Sparse_A_Size[SYSTEM_SIZE] = {0};
 
 int **Row_ids;
 // These are the column indices for each row above the diagonal (elimination, backwards substitution)
 int **Col_ids_U;
 // These are the column indices for each row below the diagonal (forwards substitution)
 int **Col_ids_L;
-// Lower factorization of A
-double **A_L;
-// Upper factorization of A, includes diagonal
-double **A_U;
+// These are the column indices corresponding to the row ids
+int **Col_ids_S1;
+// These are the column indices corresponding to Col_ids_U
+int **Col_ids_S2;
+int ***Col_ids_S3;
+int **Global_Row;
 
+// Sparse matrix
+double **A_S;
+int **Checklist_S;
+double ***A_LU;
+int **A_S_ic_ids;
+int **A_S_nz_ids;
+int **A_S_ids;
 typedef struct{
     double dx[N_KNOTS][N_STATES];
 }params;
-params knot_params = {0};
+
+typedef struct{
+    int k1[FIRST_KNOT_CONTRIBUTION];
+    int km[N_KNOTS-2][MIDDLE_KNOT_CONTRIBUTION];
+    int ke[END_KNOT_CONTRIBUTION];
+    int *zeros[SYSTEM_SIZE];
+    params knot_params;
+}knots;
+
+knots problem;
+
+int Search_For_Sparse_Column(int row, int col);
+
 struct timespec time_load, time_elim, time_subs, time_extract, time_alpha, time_update;
+
+int Search_For_Sparse_Column(int row, int col){
+    int i;
+    int result = -1;
+    for (i = 0; i < Sparse_A_Size[row]; i++)
+        if (A_S_ids[row][i] == col)
+            return i;
+
+    return result;
+}
+
+void Get_IC_Cols(){
+    int i, offset_z, offset_c;
+
+    offset_z = 0;
+    offset_c = 0;
+    Load_First_Knot_Columns(offset_z, offset_c);
+    offset_c += FIRST_KNOT_CONSTRAINTS;
+
+    for (i = 1; i < N_KNOTS - 1; i++){
+        offset_z = i*KNOT_SIZE;
+        Load_Middle_Knot_Columns(i, offset_z, offset_c);
+        offset_c += MIDDLE_KNOT_CONSTRAINTS;
+    }
+
+    offset_z = KNOT_SIZE*(N_KNOTS-1);
+    Load_End_Knot_Columns(offset_z, offset_c);
+}
 
 int main(){
     int i, j;
@@ -96,44 +158,93 @@ int main(){
 
     // Allocate A
     A = malloc(SYSTEM_SIZE*sizeof(double*));
-    if (A == NULL) return 0;
-    for (i = 0; i < SYSTEM_SIZE; i++){
+    for (i = 0; i < SYSTEM_SIZE; i++)
         A[i] = calloc(SYSTEM_SIZE, sizeof(double));
-        if (A[i] == NULL) return 0;
-    }
+
+    // Allocate Sparse A checklist
+    Checklist_S = malloc(SYSTEM_SIZE*sizeof(int*));
+    for (i = 0; i < SYSTEM_SIZE; i++)
+        Checklist_S[i] = calloc(SYSTEM_SIZE, sizeof(int));
 
     // Find Pivots and Extents
-    Load_Problem_Data();
-    Get_Pivots_Extents(A, SYSTEM_SIZE, 1.0e-20, P, P_max, Row_nz, Col_nz_U, Col_nz_L);
-    for (i = 0; i < SYSTEM_SIZE; i++){
-        memset(A[i], 0, SYSTEM_SIZE*sizeof(double));
-    }
+    Load_Problem_Data(0);
+    Get_Pivots_Extents(A, SYSTEM_SIZE, 1.0e-20, P, P_max, Row_nz, Col_nz_U, Col_nz_L, Checklist_S);
+    Parse_Checklist_S();
 
+    // Allocate sparse A
+    A_S = malloc(SYSTEM_SIZE*sizeof(double*));
+    for (i = 0; i < SYSTEM_SIZE; i++)
+        A_S[i] = calloc((Col_ic_S[i]+Col_nz_S[i]), sizeof(double));
+
+    // Fill_A_S_Zeros();
+
+    A_LU = malloc(2*sizeof(double**));
+    A_LU[0] = malloc(SYSTEM_SIZE*sizeof(double*));
+    A_LU[1] = malloc(SYSTEM_SIZE*sizeof(double*));
+
+    for (i = 0; i < SYSTEM_SIZE; i++)
+        memset(A[i], 0, SYSTEM_SIZE*sizeof(double));
+    
     // Allocate stop indices
     Row_ids = malloc(SYSTEM_SIZE*sizeof(int*));
-    if (Row_ids == NULL) return 0;
+    Col_ids_S2 = malloc(SYSTEM_SIZE*sizeof(int*));
+    Col_ids_S3 = malloc(SYSTEM_SIZE*sizeof(int**));
+    Global_Row = malloc(SYSTEM_SIZE*sizeof(int*));
     for (i = 0; i < SYSTEM_SIZE; i++){
+        Col_ids_S2[i] = malloc(Row_nz[i]*sizeof(int));
+        Col_ids_S3[i] = malloc(Row_nz[i]*sizeof(int*));
+        for (j = 0; j < Row_nz[i]; j++){
+            Col_ids_S3[i][j] = malloc(Col_nz_U[i]*sizeof(int));
+            for (int k = 0; k < Col_nz_U[i]; k++)
+                Col_ids_S3[i][j][k] = -1;
+        }
         Row_ids[i] = malloc(Row_nz[i]*sizeof(int));
-        if (Row_ids[i] == NULL) return 0;
+        Global_Row[i] = malloc(Row_nz[i]*sizeof(int));
     }
 
     Col_ids_U = malloc(SYSTEM_SIZE*sizeof(int*));
-    A_U = malloc(SYSTEM_SIZE*sizeof(double*));
+    Col_ids_S1 = malloc(SYSTEM_SIZE*sizeof(int*));
+    A_LU[1] = malloc(SYSTEM_SIZE*sizeof(double*));
     for (i = 0; i < SYSTEM_SIZE; i++){
         Col_ids_U[i] = malloc(Col_nz_U[i]*sizeof(int));
-        A_U[i] = malloc((Col_nz_U[i]+1)*sizeof(double));
+        Col_ids_S1[i] = malloc(Col_nz_U[i]*sizeof(int));
+        A_LU[1][i] = malloc((Col_nz_U[i])*sizeof(double));
     }
 
     Col_ids_L = malloc(SYSTEM_SIZE*sizeof(int*));
-    A_L = malloc(SYSTEM_SIZE*sizeof(double*));
+    A_LU[0] = malloc(SYSTEM_SIZE*sizeof(double*));
     for (i = 0; i < SYSTEM_SIZE; i++){
         Col_ids_L[i] = malloc(Col_nz_L[i]*sizeof(int));
-        A_L[P[i]] = malloc(Col_nz_L[i]*sizeof(double));
+        A_LU[0][P[i]] = malloc(Col_nz_L[i]*sizeof(double));
     }
 
     // Find stop indices
-    Load_Problem_Data();
-    Get_Stops(A, SYSTEM_SIZE, P_max, Row_ids, Col_ids_U, Col_ids_L);
+    Load_Problem_Data(0);
+    Get_Stops(A, SYSTEM_SIZE, P_max, P, Row_ids, Col_ids_U, Col_ids_S1, Col_ids_S2, Col_ids_S3, Global_Row, Col_ids_L);
+    Convert_id_U_S();
+
+    for (i = 0; i < SYSTEM_SIZE; i++){
+        memset(A[i], 0, SYSTEM_SIZE*sizeof(double));
+    }
+    Load_Problem_Data(0);
+    Load_Problem_Data(1);
+
+    Fill_A_S_Zeros();
+    // for (i = 0; i < SYSTEM_SIZE; i++){
+    //     printf("Row %d: ", i);
+    //     for (j = 0; j < SYSTEM_SIZE; j++){
+    //         if (A[i][j] != 0.0)
+    //             printf(" %3.2f ", A[i][j]);
+    //     }
+    //     printf("\n");
+    //     printf("Row %d: ", i);
+    //     for (j = 0; j < (Col_ic_S[i]+Col_nz_S[i]); j++){
+    //         if (A_S[i][j] != 0.0)
+    //             printf(" %3.2f ", A_S[i][j]);
+    //     }
+    //     printf("\n");
+    // }
+
     for (i = 0; i < SYSTEM_SIZE; i++){
         memset(A[i], 0, SYSTEM_SIZE*sizeof(double));
     }
@@ -151,15 +262,34 @@ int main(){
         free(Row_ids[i]);
         free(Col_ids_U[i]);
         free(Col_ids_L[i]);
-        free(A_L[i]);
-        free(A_U[i]);
+        free(A_LU[0][i]);
+        free(A_LU[1][i]);
+
+        free(A_S[i]);
+        free(Checklist_S[i]);
+        free(A_S_ic_ids[i]);
+        free(Col_ids_S1[i]);
+        free(Col_ids_S2[i]);
+        free(problem.zeros[i]);
+        for (j = 0; j < Row_nz[i]; j++)
+            free(Col_ids_S3[i][j]);
+        free(Col_ids_S3[i]);
     }
     free(A);
     free(Row_ids);
     free(Col_ids_U);
     free(Col_ids_L);
-    free(A_L);
-    free(A_U);
+    free(A_LU[0]);
+    free(A_LU[1]);
+    free(A_LU);
+
+    free(A_S);
+    free(Checklist_S);
+    free(A_S_ic_ids);
+    free(Col_ids_S1);
+    free(Col_ids_S2);
+    free(Col_ids_S3);
+    // free(A_S_nz_ids);
 
     // Log data
     if (plot_flag){
@@ -199,25 +329,28 @@ void Run_SQP(){
     
     for (iterations = 0; iterations < max_iterations; iterations++){
         // Load A and b matrices
-        // for (i = 0; i < SYSTEM_SIZE; i++)
-            // memset(A[i], 0, SYSTEM_SIZE*sizeof(double));
-        Load_Problem_Data();
+        Load_Problem_Data(0);
+        Load_Problem_Data(1);
+        Fill_A_S_Zeros();
         timespec_get(&time_load, TIME_UTC);
 
         // Setup A in form A=(L-E)+U by partial pivoting and eliminating
-        (void)LUDecompose(A, SYSTEM_SIZE, P_max,
-                            Row_nz, Row_ids,
-                            Col_nz_U, Col_ids_U,
-                            A_L, A_U);
+        LUDecompose(A, A_S, SYSTEM_SIZE, P_max,
+                    Row_nz, Row_ids,
+                    Col_nz_U, Col_ids_U,
+                    Col_ids_S1, Col_ids_S2, Col_ids_S3, 
+                    A_LU[0], A_LU[1]);
+
         timespec_get(&time_elim, TIME_UTC);
 
         // Perform forward and backward substitution to solve for x
         LUPSolve(A, P, b, SYSTEM_SIZE, x,
                 Col_nz_U, Col_ids_U,
                 Col_nz_L, Col_ids_L,
-                A_L, A_U);
+                A_LU[0], A_LU[1]);
         // Need to swap back A_L after solving so it is ready for next iteration
         Reset_L();
+        Reset_A_S();
         timespec_get(&time_subs, TIME_UTC);
 
         // Extract change in decision variables and new lagrange multipliers from x
@@ -242,6 +375,46 @@ void Run_SQP(){
     }
 }
 
+// void Get_P_Revert(){
+//     int i, j, k;
+//     int P_temp[SYSTEM_SIZE];
+//     memcpy(P_temp, P, SYSTEM_SIZE*sizeof(int));
+
+//     for (i = 0; i < SYSTEM_SIZE; i++)
+//         P_Revert[i] = i;
+
+//     for (i = 0; i < SYSTEM_SIZE; i++){
+//         while (P_temp[i] != i){
+//             j = P_temp[i];
+//             P_temp[i] = P_temp[j];
+//             P_temp[j] = j;
+
+//             k = P_Revert[i];
+//             P_Revert[i] = P_Revert[j];
+//             P_Revert[j] = k;
+//         }
+//     }
+// }
+
+void Reset_A_S(){
+    double *ptr;
+    int i, j;
+    int P_temp[SYSTEM_SIZE];
+    memcpy(P_temp, P, SYSTEM_SIZE*sizeof(int));
+
+    for (i = 0; i < SYSTEM_SIZE; i++){
+        while(P_temp[i] != i){
+            j = P_temp[i];
+            P_temp[i] = P_temp[j];
+            P_temp[j] = j;
+
+            ptr = A_S[i];
+            A_S[i] = A_S[j];
+            A_S[j] = ptr;
+        }
+    }
+}
+
 void Reset_L(){
     double *ptr;
     int i, j;
@@ -254,9 +427,9 @@ void Reset_L(){
             P_temp[i] = P_temp[j];
             P_temp[j] = j;
 
-            ptr = A_L[i];
-            A_L[i] = A_L[j];
-            A_L[j] = ptr;
+            ptr = A_LU[0][i];
+            A_LU[0][i] = A_LU[0][j];
+            A_LU[0][j] = ptr;
         }
     }
 }
@@ -351,7 +524,7 @@ double Select_Alpha(double *delta_z){
     return alpha;
 }
 
-void Load_Problem_Data(){
+void Load_Problem_Data(int sparse){
     // Update and load the gradient of the cost function wrt the decision variables
     Load_Gradient();
 
@@ -360,10 +533,104 @@ void Load_Problem_Data(){
     Load_Equalities();
 
     // Evaluate and load the jacobian of the constraints wrt the decision variables
-    Load_Jacobian();
+    Load_Jacobian(sparse);
     
     // Evaluate and load the hessian of the lagrangian wrt the decision variables
-    Load_Hessian();
+    Load_Hessian(sparse);
+
+}
+
+void First_Knot_Jacobian_Sparse(int knot, int offset_z, int offset_c){
+    int i = N_DECISION_VARIABLES;
+    int j = i + offset_c;
+    int k = offset_z;
+    const double c1 = -h[knot] / 2.0;
+    
+    A_S[j][problem.k1[0]] = -1.0;
+    A_S[j][problem.k1[1]] = c1;
+    A_S[j][problem.k1[2]] = 1.0;
+    A_S[j][problem.k1[3]] = c1;
+    A_S[k][problem.k1[4]] = A_S[j][problem.k1[0]];
+    A_S[k+1][problem.k1[5]] = A_S[j][problem.k1[1]];
+    A_S[k+5][problem.k1[6]] = A_S[j][problem.k1[2]];
+    A_S[k+6][problem.k1[7]] = A_S[j][problem.k1[3]];
+
+    A_S[j+1][problem.k1[8]] = -1.0;
+    A_S[j+1][problem.k1[9]] = c1;
+    A_S[j+1][problem.k1[10]] = 1.0;
+    A_S[j+1][problem.k1[11]] = c1;
+    A_S[k+1][problem.k1[12]] = A_S[j+1][problem.k1[8]];
+    A_S[k+2][problem.k1[13]] = A_S[j+1][problem.k1[9]];
+    A_S[k+6][problem.k1[14]] = A_S[j+1][problem.k1[10]];
+    A_S[k+7][problem.k1[15]] = A_S[j+1][problem.k1[11]];
+
+    A_S[j+2][problem.k1[16]] = -1.0;
+    A_S[j+2][problem.k1[17]] = 1.0;
+    A_S[k+2][problem.k1[18]] = A_S[j+2][problem.k1[16]];
+    A_S[k+3][problem.k1[19]] = A_S[j+2][problem.k1[17]];
+
+    A_S[j+3][problem.k1[20]] = 1.0;
+    A_S[j+3][problem.k1[21]] = 1.0;
+    A_S[k+2][problem.k1[22]] = A_S[j+3][problem.k1[20]];
+    A_S[k+4][problem.k1[23]] = A_S[j+3][problem.k1[21]];
+
+    A_S[j+4][problem.k1[24]] = -1.0;
+    A_S[k][problem.k1[25]] = A_S[j+4][problem.k1[24]];
+
+    A_S[j+5][problem.k1[26]] = -1.0;
+    A_S[k+1][problem.k1[27]] = A_S[j+5][problem.k1[26]];
+   
+}
+
+void Middle_Knot_Jacobian_Sparse(int knot, int offset_z, int offset_c){
+    int i = N_DECISION_VARIABLES;
+    int j = i + offset_c;
+    int k = offset_z;
+    const double c1 = -h[knot] / 2.0;
+
+    A_S[j][problem.km[knot-1][0]] = -1.0;
+    A_S[j][problem.km[knot-1][1]] = c1;
+    A_S[j][problem.km[knot-1][2]] = 1.0;
+    A_S[j][problem.km[knot-1][3]] = c1;
+    A_S[k][problem.km[knot-1][4]] = A_S[j][problem.km[knot-1][0]];
+    A_S[k+1][problem.km[knot-1][5]] = A_S[j][problem.km[knot-1][1]];
+    A_S[k+5][problem.km[knot-1][6]] = A_S[j][problem.km[knot-1][2]];
+    A_S[k+6][problem.km[knot-1][7]] = A_S[j][problem.km[knot-1][3]];
+
+    A_S[j+1][problem.km[knot-1][8]] = -1.0;
+    A_S[j+1][problem.km[knot-1][9]] = c1;
+    A_S[j+1][problem.km[knot-1][10]] = 1.0;
+    A_S[j+1][problem.km[knot-1][11]] = c1;
+    A_S[k+1][problem.km[knot-1][12]] = A_S[j+1][problem.km[knot-1][8]];
+    A_S[k+2][problem.km[knot-1][13]] = A_S[j+1][problem.km[knot-1][9]];
+    A_S[k+6][problem.km[knot-1][14]] = A_S[j+1][problem.km[knot-1][10]];
+    A_S[k+7][problem.km[knot-1][15]] = A_S[j+1][problem.km[knot-1][11]];
+
+    A_S[j+2][problem.km[knot-1][16]] = -1.0;
+    A_S[j+2][problem.km[knot-1][17]] = 1.0;
+    A_S[k+2][problem.km[knot-1][18]] = A_S[j+2][problem.km[knot-1][16]];
+    A_S[k+3][problem.km[knot-1][19]] = A_S[j+2][problem.km[knot-1][17]];
+
+    A_S[j+3][problem.km[knot-1][20]] = 1.0;
+    A_S[j+3][problem.km[knot-1][21]] = 1.0;
+    A_S[k+2][problem.km[knot-1][22]] = A_S[j+3][problem.km[knot-1][20]];
+    A_S[k+4][problem.km[knot-1][23]] = A_S[j+3][problem.km[knot-1][21]];
+}
+
+void End_Knot_Jacobian_Sparse(int knot, int offset_z, int offset_c){
+    int i = N_DECISION_VARIABLES;
+    int j = i + offset_c;
+    int k = offset_z;
+
+    A_S[j][problem.ke[0]] = -1.0;
+    A_S[j][problem.ke[1]] = 1.0;
+    A_S[k+2][problem.ke[2]] = A_S[j][problem.ke[0]];
+    A_S[k+3][problem.ke[3]] = A_S[j][problem.ke[1]];
+
+    A_S[j+1][problem.ke[4]] = 1.0;
+    A_S[j+1][problem.ke[5]] = 1.0;
+    A_S[k+2][problem.ke[6]] = A_S[j+1][problem.ke[4]];
+    A_S[k+4][problem.ke[7]] = A_S[j+1][problem.ke[5]];
 }
 
 void First_Knot_Jacobian(int knot, int offset_z, int offset_c){
@@ -440,7 +707,6 @@ void Middle_Knot_Jacobian(int knot, int offset_z, int offset_c){
     A[j+3][k+4] = 1.0;
     A[k+2][j+3] = A[j+3][k+2];
     A[k+4][j+3] = A[j+3][k+4];
-
 }
 
 void End_Knot_Jacobian(int knot, int offset_z, int offset_c){
@@ -457,24 +723,59 @@ void End_Knot_Jacobian(int knot, int offset_z, int offset_c){
     A[j+1][k+4] = 1.0;
     A[k+2][j+1] = A[j+1][k+2];
     A[k+4][j+1] = A[j+1][k+4];
-
 }
 
-void Load_Jacobian(){
+void Load_Jacobian(int sparse){
     int i, offset_z, offset_c;
     offset_z = 0;
     offset_c = 0;
-    First_Knot_Jacobian(0, offset_z, offset_c);
+    if (sparse)
+        First_Knot_Jacobian_Sparse(0, offset_z, offset_c);
+    else
+        First_Knot_Jacobian(0, offset_z, offset_c);
+    
     offset_c += FIRST_KNOT_CONSTRAINTS;
 
     for (i = 1; i < N_KNOTS - 1; i++){
         offset_z = i*KNOT_SIZE;
-        Middle_Knot_Jacobian(i, offset_z, offset_c);
+        if (sparse)
+            Middle_Knot_Jacobian_Sparse(i, offset_z, offset_c);
+        else
+            Middle_Knot_Jacobian(i, offset_z, offset_c);
         offset_c += MIDDLE_KNOT_CONSTRAINTS;
     }
 
     offset_z = KNOT_SIZE*(N_KNOTS-1);
-    End_Knot_Jacobian(N_KNOTS-1, offset_z, offset_c);
+    if (sparse)
+        End_Knot_Jacobian_Sparse(N_KNOTS-1, offset_z, offset_c);
+    else
+        End_Knot_Jacobian(N_KNOTS-1, offset_z, offset_c);
+}
+
+void First_Knot_Hessian_Sparse(int knot, int offset_z){
+    int i = offset_z;
+    
+    A_S[i+3][problem.k1[28]] = mu / pow(z[i+3], 2);
+    A_S[i+4][problem.k1[29]] = mu / pow(z[i+4], 2);
+
+}
+
+void Middle_Knot_Hessian_Sparse(int knot, int offset_z){
+    int i = offset_z;
+    
+    A_S[i+3][problem.km[knot-1][24]] = mu / pow(z[i+3], 2);
+    A_S[i+4][problem.km[knot-1][25]] = mu / pow(z[i+4], 2);
+
+}
+
+void End_Knot_Hessian_Sparse(int knot, int offset_z){
+    int i = offset_z;
+    
+    A_S[i][problem.ke[8]] = 2.0;
+    A_S[i+1][problem.ke[9]] = 2.0;
+    A_S[i+3][problem.ke[10]] = mu / pow(z[i+3], 2);
+    A_S[i+4][problem.ke[11]] = mu / pow(z[i+4], 2);
+
 }
 
 void First_Knot_Hessian(int knot, int offset_z){
@@ -500,26 +801,35 @@ void End_Knot_Hessian(int knot, int offset_z){
     A[i+4][i+4] = mu / pow(z[i+4], 2);
 }
 
-void Load_Hessian(){
+void Load_Hessian(int sparse){
     int i, offset_z;
     offset_z = 0;
-    First_Knot_Hessian(0, offset_z);
+    if (sparse)
+        First_Knot_Hessian_Sparse(0, offset_z);
+    else
+        First_Knot_Hessian(0, offset_z);
 
     for (i = 1; i < N_KNOTS - 1; i++){
         offset_z = i*KNOT_SIZE;
-        Middle_Knot_Hessian(i, offset_z);
+        if (sparse)
+            Middle_Knot_Hessian_Sparse(i, offset_z);
+        else
+            Middle_Knot_Hessian(i, offset_z);
     }
 
     offset_z = KNOT_SIZE*(N_KNOTS-1);
-    End_Knot_Hessian(N_KNOTS-1, offset_z);
+    if (sparse)
+        End_Knot_Hessian_Sparse(N_KNOTS-1, offset_z);
+    else
+        End_Knot_Hessian(N_KNOTS-1, offset_z);
 }
 
 void Get_Knot_Params(int offset, int knot){
     double v = z[offset+1];
     double a = z[offset+2];
     
-    knot_params.dx[knot][0] = v;
-    knot_params.dx[knot][1] = a;
+    problem.knot_params.dx[knot][0] = v;
+    problem.knot_params.dx[knot][1] = a;
 }
 
 void First_Knot_Eq(int knot, int offset_z, int offset_c){
@@ -533,9 +843,9 @@ void First_Knot_Eq(int knot, int offset_z, int offset_c){
 
     // Defects
     b[N_DECISION_VARIABLES+offset_c] = 
-        0.5*h[knot]*(knot_params.dx[knot][0] + knot_params.dx[knot+1][0]) + z[offset_z] - z[offset_z+5];
+        0.5*h[knot]*(problem.knot_params.dx[knot][0] + problem.knot_params.dx[knot+1][0]) + z[offset_z] - z[offset_z+5];
     b[N_DECISION_VARIABLES+offset_c+1] = 
-        0.5*h[knot]*(knot_params.dx[knot][1] + knot_params.dx[knot+1][1]) + z[offset_z+1] - z[offset_z+6];
+        0.5*h[knot]*(problem.knot_params.dx[knot][1] + problem.knot_params.dx[knot+1][1]) + z[offset_z+1] - z[offset_z+6];
     // Lower bounds
     b[N_DECISION_VARIABLES+offset_c+2] = z[offset_z+2] - lb - z[offset_z+3];
     // Upper bounds
@@ -556,9 +866,9 @@ void Middle_Knot_Eq(int knot, int offset_z, int offset_c){
 
     // Defects
     b[N_DECISION_VARIABLES+offset_c] = 
-        0.5*h[knot]*(knot_params.dx[knot][0] + knot_params.dx[knot+1][0]) + z[offset_z] - z[offset_z+5];
+        0.5*h[knot]*(problem.knot_params.dx[knot][0] + problem.knot_params.dx[knot+1][0]) + z[offset_z] - z[offset_z+5];
     b[N_DECISION_VARIABLES+offset_c+1] = 
-        0.5*h[knot]*(knot_params.dx[knot][1] + knot_params.dx[knot+1][1]) + z[offset_z+1] - z[offset_z+6];
+        0.5*h[knot]*(problem.knot_params.dx[knot][1] + problem.knot_params.dx[knot+1][1]) + z[offset_z+1] - z[offset_z+6];
     // Lower bounds
     b[N_DECISION_VARIABLES+offset_c+2] = z[offset_z+2] - lb - z[offset_z+3];
     // Upper bounds
@@ -633,3 +943,193 @@ void Load_Gradient(){
     offset = KNOT_SIZE*(N_KNOTS-1);
     End_Knot_Grad(offset);
 }
+
+void Load_First_Knot_Columns(int offset_z, int offset_c){
+    int i = N_DECISION_VARIABLES;
+    int j = i + offset_c;
+    int k = offset_z;
+
+    // Jacobian
+    problem.k1[0] = Search_For_Sparse_Column(j, k);
+    problem.k1[1] = Search_For_Sparse_Column(j, k+1);
+    problem.k1[2] = Search_For_Sparse_Column(j, k+5);
+    problem.k1[3] = Search_For_Sparse_Column(j, k+6);
+    problem.k1[4] = Search_For_Sparse_Column(k, j);
+    problem.k1[5] = Search_For_Sparse_Column(k+1, j);
+    problem.k1[6] = Search_For_Sparse_Column(k+5, j);
+    problem.k1[7] = Search_For_Sparse_Column(k+6, j); // here
+
+    problem.k1[8] = Search_For_Sparse_Column(j+1, k+1);
+    problem.k1[9] = Search_For_Sparse_Column(j+1, k+2);
+    problem.k1[10] = Search_For_Sparse_Column(j+1, k+6);
+    problem.k1[11] = Search_For_Sparse_Column(j+1, k+7);
+    problem.k1[12] = Search_For_Sparse_Column(k+1, j+1);
+    problem.k1[13] = Search_For_Sparse_Column(k+2, j+1);
+    problem.k1[14] = Search_For_Sparse_Column(k+6, j+1);
+    problem.k1[15] = Search_For_Sparse_Column(k+7, j+1);
+
+    problem.k1[16] = Search_For_Sparse_Column(j+2, k+2);
+    problem.k1[17] = Search_For_Sparse_Column(j+2, k+3);
+    problem.k1[18] = Search_For_Sparse_Column(k+2, j+2);
+    problem.k1[19] = Search_For_Sparse_Column(k+3, j+2);
+
+    problem.k1[20] = Search_For_Sparse_Column(j+3, k+2);
+    problem.k1[21] = Search_For_Sparse_Column(j+3, k+4);
+    problem.k1[22] = Search_For_Sparse_Column(k+2, j+3);
+    problem.k1[23] = Search_For_Sparse_Column(k+4, j+3);
+
+    problem.k1[24] = Search_For_Sparse_Column(j+4, k);
+    problem.k1[25] = Search_For_Sparse_Column(k, j+4);
+
+    problem.k1[26] = Search_For_Sparse_Column(j+5, k+1);
+    problem.k1[27] = Search_For_Sparse_Column(k+1, j+5);
+
+    problem.k1[28] = Search_For_Sparse_Column(k+3, k+3);
+    problem.k1[29] = Search_For_Sparse_Column(k+4, k+4);
+}
+
+void Load_Middle_Knot_Columns(int knot, int offset_z, int offset_c){
+    int i = N_DECISION_VARIABLES;
+    int j = i + offset_c;
+    int k = offset_z;
+    int c = 0;
+
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(j, k);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(j, k+1);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(j, k+5);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(j, k+6);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(k, j);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+1, j);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+5, j);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+6, j);
+
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(j+1, k+1);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(j+1, k+2);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(j+1, k+6);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(j+1, k+7);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+1, j+1);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+2, j+1);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+6, j+1);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+7, j+1);
+
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(j+2, k+2);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(j+2, k+3);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+2, j+2);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+3, j+2);
+
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(j+3, k+2);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(j+3, k+4);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+2, j+3);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+4, j+3);
+
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+3, k+3);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+4, k+4);
+}
+
+void Load_End_Knot_Columns(int offset_z, int offset_c){
+    int i = N_DECISION_VARIABLES;
+    int j = i + offset_c;
+    int k = offset_z;
+    int c = 0;
+
+    // jacobian
+    problem.ke[c++] = Search_For_Sparse_Column(j, k+2);
+    problem.ke[c++] = Search_For_Sparse_Column(j, k+3);
+    problem.ke[c++] = Search_For_Sparse_Column(k+2, j);
+    problem.ke[c++] = Search_For_Sparse_Column(k+3, j);
+
+    problem.ke[c++] = Search_For_Sparse_Column(j+1, k+2);
+    problem.ke[c++] = Search_For_Sparse_Column(j+1, k+4);
+    problem.ke[c++] = Search_For_Sparse_Column(k+2, j+1);
+    problem.ke[c++] = Search_For_Sparse_Column(k+4, j+1);
+
+    // hessian
+    problem.ke[c++] = Search_For_Sparse_Column(k, k);
+    problem.ke[c++] = Search_For_Sparse_Column(k+1, k+1);
+    problem.ke[c++] = Search_For_Sparse_Column(k+3, k+3);
+    problem.ke[c++] = Search_For_Sparse_Column(k+4, k+4);
+}
+
+void Parse_Checklist_S(){
+    int k_ic, k_nz, k_tot;
+    int *ptr;
+    int i, j;
+    int P_temp[SYSTEM_SIZE];
+
+    // Reset the Checklist so it looks like it started before being permuted
+    memcpy(P_temp, P, SYSTEM_SIZE*sizeof(int));
+
+    for (i = 0; i < SYSTEM_SIZE; i++){
+        while(P_temp[i] != i){
+            j = P_temp[i];
+            P_temp[i] = P_temp[j];
+            P_temp[j] = j;
+
+            ptr = Checklist_S[i];
+            Checklist_S[i] = Checklist_S[j];
+            Checklist_S[j] = ptr;
+        }
+    }
+
+    A_S_ic_ids = malloc(SYSTEM_SIZE*sizeof(int*));
+    A_S_nz_ids = malloc(SYSTEM_SIZE*sizeof(int*));
+    A_S_ids = malloc(SYSTEM_SIZE*sizeof(int*));
+
+    for (i = 0; i < SYSTEM_SIZE; i++){
+
+        for (j = 0; j < SYSTEM_SIZE; j++){
+            if (Checklist_S[i][j] != 0)
+                Sparse_A_Size[i]++;
+
+            if (Checklist_S[i][j] == 1)
+                Col_ic_S[i]++;
+            else if (Checklist_S[i][j] == 2)
+                Col_nz_S[i]++;
+        }
+        A_S_ic_ids[i] = malloc(Col_ic_S[i]*sizeof(int));
+        A_S_nz_ids[i] = malloc(Col_nz_S[i]*sizeof(int));
+        A_S_ids[i] = malloc(Sparse_A_Size[i]*sizeof(int));
+        problem.zeros[i] = malloc(Col_nz_S[i]*sizeof(int));
+
+        k_ic = 0;
+        k_nz = 0;
+        k_tot = 0;
+        for (j = 0; j < SYSTEM_SIZE; j++){
+            if (Checklist_S[i][j] != 0)
+                A_S_ids[i][k_tot++] = j;
+
+            if (Checklist_S[i][j] == 1)
+                A_S_ic_ids[i][k_ic++] = j;
+            else if (Checklist_S[i][j] == 2){
+                A_S_nz_ids[i][k_nz] = j;
+                problem.zeros[i][k_nz] = k_ic + k_nz;
+                k_nz++;
+            }
+        }
+
+    }
+
+    Get_IC_Cols();
+}
+
+void Fill_A_S_Zeros(){
+    int i, j;
+    for (i = 0; i < SYSTEM_SIZE; i++)
+        for (j = 0; j < Col_nz_S[i]; j++)
+            A_S[i][problem.zeros[i][j]] = 0.0;
+}
+
+void Convert_id_U_S(){
+    int i, j, k;
+    for (i = 0; i < SYSTEM_SIZE; i++){
+        for (j = 0; j < Col_nz_U[i]; j++)
+            Col_ids_S1[i][j] = Search_For_Sparse_Column(P[i], Col_ids_U[i][j]);
+        // for (j = 0; j < Row_nz[i]; j++)
+        //     Col_ids_S2[i][j] = Search_For_Sparse_Column(Global_Row[i][j], Col_ids_S2[i][j]);
+        for (j = 0; j < Row_nz[i]; j++)
+            for (k = 0; k < Col_nz_U[i]; k++)
+                Col_ids_S3[i][j][k] = Search_For_Sparse_Column(Global_Row[i][j], Col_ids_S3[i][j][k]);
+    }
+
+}
+
