@@ -34,7 +34,7 @@ $(BUILD_DIR_DBG)/%.o: %.c
 	mkdir -p $(dir $@)
 	$(CC) $(CPPFLAGS) $(CCDBGFLAGS) -c $< -o $@
 
--include $(CCDEPENGS) $(CCDBGDEPENDS)
+-include $(CCDEPENDS) $(CCDBGDEPENDS)
 
 
 .PHONY: clean
@@ -50,4 +50,4 @@ clean_dep:
 .PHONY: pristine
 
 pristine:
-	rm -rf $(BUILD_DIR_REL)/Block_1D.exe $(BUILD_DIR_DBG)/Block_1D_DBG.exe $(CCDEPENDS) $(CCDEPENDS) $(CCDBGOBJECTS) $(CCDBGDEPENDS)
+	rm -rf $(BUILD_DIR_REL)/Block_1D.exe $(BUILD_DIR_DBG)/Block_1D_DBG.exe $(CCDEPENDS) $(CCOBJECTS) $(CCDBGOBJECTS) $(CCDBGDEPENDS)

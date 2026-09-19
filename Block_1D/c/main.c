@@ -14,7 +14,6 @@ void Load_Equalities();
 void Load_Gradient();
 double Select_Alpha(double *delta_z);
 double Get_Cost(double *z);
-void Reset_L();
 void Reset_A_S();
 void Load_First_Knot_Columns(int offset_z, int offset_c);
 void Load_Middle_Knot_Columns(int knot, int offset_z, int offset_c);
@@ -25,7 +24,7 @@ void Convert_id_U_S();
 
 #define N_STATES 2
 #define N_INPUTS 1
-#define N_KNOTS 300
+#define N_KNOTS 150
 #define N_LBS 1
 #define N_UBS 1
 #define FIRST_KNOT_CONSTRAINTS 6
@@ -84,9 +83,6 @@ int **Global_Row;
 // Sparse matrix
 double **A_S;
 int **Checklist_S;
-double ***A_LU;
-int **A_S_ic_ids;
-int **A_S_nz_ids;
 int **A_S_ids;
 typedef struct{
     double dx[N_KNOTS][N_STATES];
@@ -174,24 +170,16 @@ int main(){
     // Allocate sparse A
     A_S = malloc(SYSTEM_SIZE*sizeof(double*));
     for (i = 0; i < SYSTEM_SIZE; i++)
-        A_S[i] = calloc((Col_ic_S[i]+Col_nz_S[i]), sizeof(double));
-
-    // Fill_A_S_Zeros();
-
-    A_LU = malloc(2*sizeof(double**));
-    A_LU[0] = malloc(SYSTEM_SIZE*sizeof(double*));
-    A_LU[1] = malloc(SYSTEM_SIZE*sizeof(double*));
+        A_S[i] = calloc(Sparse_A_Size[i], sizeof(double));
 
     for (i = 0; i < SYSTEM_SIZE; i++)
         memset(A[i], 0, SYSTEM_SIZE*sizeof(double));
     
     // Allocate stop indices
     Row_ids = malloc(SYSTEM_SIZE*sizeof(int*));
-    Col_ids_S2 = malloc(SYSTEM_SIZE*sizeof(int*));
     Col_ids_S3 = malloc(SYSTEM_SIZE*sizeof(int**));
     Global_Row = malloc(SYSTEM_SIZE*sizeof(int*));
     for (i = 0; i < SYSTEM_SIZE; i++){
-        Col_ids_S2[i] = malloc(Row_nz[i]*sizeof(int));
         Col_ids_S3[i] = malloc(Row_nz[i]*sizeof(int*));
         for (j = 0; j < Row_nz[i]; j++){
             Col_ids_S3[i][j] = malloc(Col_nz_U[i]*sizeof(int));
@@ -204,18 +192,16 @@ int main(){
 
     Col_ids_U = malloc(SYSTEM_SIZE*sizeof(int*));
     Col_ids_S1 = malloc(SYSTEM_SIZE*sizeof(int*));
-    A_LU[1] = malloc(SYSTEM_SIZE*sizeof(double*));
     for (i = 0; i < SYSTEM_SIZE; i++){
         Col_ids_U[i] = malloc(Col_nz_U[i]*sizeof(int));
         Col_ids_S1[i] = malloc(Col_nz_U[i]*sizeof(int));
-        A_LU[1][i] = malloc((Col_nz_U[i])*sizeof(double));
     }
 
     Col_ids_L = malloc(SYSTEM_SIZE*sizeof(int*));
-    A_LU[0] = malloc(SYSTEM_SIZE*sizeof(double*));
+    Col_ids_S2 = malloc(SYSTEM_SIZE*sizeof(int*));
     for (i = 0; i < SYSTEM_SIZE; i++){
         Col_ids_L[i] = malloc(Col_nz_L[i]*sizeof(int));
-        A_LU[0][P[i]] = malloc(Col_nz_L[i]*sizeof(double));
+        Col_ids_S2[i] = malloc(Col_nz_L[i]*sizeof(int));
     }
 
     // Find stop indices
@@ -223,27 +209,9 @@ int main(){
     Get_Stops(A, SYSTEM_SIZE, P_max, P, Row_ids, Col_ids_U, Col_ids_S1, Col_ids_S2, Col_ids_S3, Global_Row, Col_ids_L);
     Convert_id_U_S();
 
-    for (i = 0; i < SYSTEM_SIZE; i++){
-        memset(A[i], 0, SYSTEM_SIZE*sizeof(double));
-    }
-    Load_Problem_Data(0);
     Load_Problem_Data(1);
 
     Fill_A_S_Zeros();
-    // for (i = 0; i < SYSTEM_SIZE; i++){
-    //     printf("Row %d: ", i);
-    //     for (j = 0; j < SYSTEM_SIZE; j++){
-    //         if (A[i][j] != 0.0)
-    //             printf(" %3.2f ", A[i][j]);
-    //     }
-    //     printf("\n");
-    //     printf("Row %d: ", i);
-    //     for (j = 0; j < (Col_ic_S[i]+Col_nz_S[i]); j++){
-    //         if (A_S[i][j] != 0.0)
-    //             printf(" %3.2f ", A_S[i][j]);
-    //     }
-    //     printf("\n");
-    // }
 
     for (i = 0; i < SYSTEM_SIZE; i++){
         memset(A[i], 0, SYSTEM_SIZE*sizeof(double));
@@ -262,12 +230,9 @@ int main(){
         free(Row_ids[i]);
         free(Col_ids_U[i]);
         free(Col_ids_L[i]);
-        free(A_LU[0][i]);
-        free(A_LU[1][i]);
 
         free(A_S[i]);
         free(Checklist_S[i]);
-        free(A_S_ic_ids[i]);
         free(Col_ids_S1[i]);
         free(Col_ids_S2[i]);
         free(problem.zeros[i]);
@@ -279,17 +244,12 @@ int main(){
     free(Row_ids);
     free(Col_ids_U);
     free(Col_ids_L);
-    free(A_LU[0]);
-    free(A_LU[1]);
-    free(A_LU);
 
     free(A_S);
     free(Checklist_S);
-    free(A_S_ic_ids);
     free(Col_ids_S1);
     free(Col_ids_S2);
     free(Col_ids_S3);
-    // free(A_S_nz_ids);
 
     // Log data
     if (plot_flag){
@@ -304,19 +264,19 @@ int main(){
     if (plot_flag) system("gnuplot plotter.plt");
 
     double time_elapsed = (double)(time_end.tv_sec - time_start.tv_sec) + (double)(time_end.tv_nsec - time_start.tv_nsec)/1.0e9;
-    double load_time = (double)(time_load.tv_sec - time_start.tv_sec) + (double)(time_load.tv_nsec - time_start.tv_nsec)/1.0e9;
-    double elim_time = (double)(time_elim.tv_sec - time_load.tv_sec) + (double)(time_elim.tv_nsec - time_load.tv_nsec)/1.0e9;
-    double subs_time = (double)(time_subs.tv_sec - time_elim.tv_sec) + (double)(time_subs.tv_nsec - time_elim.tv_nsec)/1.0e9;
-    double extr_time = (double)(time_extract.tv_sec - time_subs.tv_sec) + (double)(time_extract.tv_nsec - time_subs.tv_nsec)/1.0e9;
-    double alpha_time = (double)(time_alpha.tv_sec - time_extract.tv_sec) + (double)(time_alpha.tv_nsec - time_extract.tv_nsec)/1.0e9;
-    double upd_time = (double)(time_update.tv_sec - time_alpha.tv_sec) + (double)(time_update.tv_nsec - time_alpha.tv_nsec)/1.0e9;
+    // double load_time = (double)(time_load.tv_sec - time_start.tv_sec) + (double)(time_load.tv_nsec - time_start.tv_nsec)/1.0e9;
+    // double elim_time = (double)(time_elim.tv_sec - time_load.tv_sec) + (double)(time_elim.tv_nsec - time_load.tv_nsec)/1.0e9;
+    // double subs_time = (double)(time_subs.tv_sec - time_elim.tv_sec) + (double)(time_subs.tv_nsec - time_elim.tv_nsec)/1.0e9;
+    // double extr_time = (double)(time_extract.tv_sec - time_subs.tv_sec) + (double)(time_extract.tv_nsec - time_subs.tv_nsec)/1.0e9;
+    // double alpha_time = (double)(time_alpha.tv_sec - time_extract.tv_sec) + (double)(time_alpha.tv_nsec - time_extract.tv_nsec)/1.0e9;
+    // double upd_time = (double)(time_update.tv_sec - time_alpha.tv_sec) + (double)(time_update.tv_nsec - time_alpha.tv_nsec)/1.0e9;
     printf("%.9f seconds elapsed\n", time_elapsed);
-    printf("%.9f seconds loading\n", load_time);
-    printf("%.9f seconds eliminating\n", elim_time);
-    printf("%.9f seconds substituting\n", subs_time);
-    printf("%.9f seconds extracting\n", extr_time);
-    printf("%.9f seconds alpha\n", alpha_time);
-    printf("%.9f seconds updating\n", upd_time);
+    // printf("%.9f seconds loading\n", load_time);
+    // printf("%.9f seconds eliminating\n", elim_time);
+    // printf("%.9f seconds substituting\n", subs_time);
+    // printf("%.9f seconds extracting\n", extr_time);
+    // printf("%.9f seconds alpha\n", alpha_time);
+    // printf("%.9f seconds updating\n", upd_time);
     return 1;
 }
 
@@ -329,27 +289,25 @@ void Run_SQP(){
     
     for (iterations = 0; iterations < max_iterations; iterations++){
         // Load A and b matrices
-        Load_Problem_Data(0);
+        // Load_Problem_Data(0);
         Load_Problem_Data(1);
         Fill_A_S_Zeros();
         timespec_get(&time_load, TIME_UTC);
 
         // Setup A in form A=(L-E)+U by partial pivoting and eliminating
-        LUDecompose(A, A_S, SYSTEM_SIZE, P_max,
-                    Row_nz, Row_ids,
-                    Col_nz_U, Col_ids_U,
-                    Col_ids_S1, Col_ids_S2, Col_ids_S3, 
-                    A_LU[0], A_LU[1]);
+        LUDecompose(A_S, SYSTEM_SIZE, P_max,
+                    Row_nz, Row_ids, Col_nz_U,
+                    Col_ids_S1, Col_ids_S3);
 
         timespec_get(&time_elim, TIME_UTC);
 
         // Perform forward and backward substitution to solve for x
-        LUPSolve(A, P, b, SYSTEM_SIZE, x,
+        LUPSolve(A_S, P, b, SYSTEM_SIZE, x,
                 Col_nz_U, Col_ids_U,
                 Col_nz_L, Col_ids_L,
-                A_LU[0], A_LU[1]);
+                Col_ids_S1, Col_ids_S2);
         // Need to swap back A_L after solving so it is ready for next iteration
-        Reset_L();
+        // Reset_L();
         Reset_A_S();
         timespec_get(&time_subs, TIME_UTC);
 
@@ -375,27 +333,6 @@ void Run_SQP(){
     }
 }
 
-// void Get_P_Revert(){
-//     int i, j, k;
-//     int P_temp[SYSTEM_SIZE];
-//     memcpy(P_temp, P, SYSTEM_SIZE*sizeof(int));
-
-//     for (i = 0; i < SYSTEM_SIZE; i++)
-//         P_Revert[i] = i;
-
-//     for (i = 0; i < SYSTEM_SIZE; i++){
-//         while (P_temp[i] != i){
-//             j = P_temp[i];
-//             P_temp[i] = P_temp[j];
-//             P_temp[j] = j;
-
-//             k = P_Revert[i];
-//             P_Revert[i] = P_Revert[j];
-//             P_Revert[j] = k;
-//         }
-//     }
-// }
-
 void Reset_A_S(){
     double *ptr;
     int i, j;
@@ -411,25 +348,6 @@ void Reset_A_S(){
             ptr = A_S[i];
             A_S[i] = A_S[j];
             A_S[j] = ptr;
-        }
-    }
-}
-
-void Reset_L(){
-    double *ptr;
-    int i, j;
-    int P_temp[SYSTEM_SIZE];
-    memcpy(P_temp, P, SYSTEM_SIZE*sizeof(int));
-
-    for (i = 0; i < SYSTEM_SIZE; i++){
-        while(P_temp[i] != i){
-            j = P_temp[i];
-            P_temp[i] = P_temp[j];
-            P_temp[j] = j;
-
-            ptr = A_LU[0][i];
-            A_LU[0][i] = A_LU[0][j];
-            A_LU[0][j] = ptr;
         }
     }
 }
@@ -1071,8 +989,6 @@ void Parse_Checklist_S(){
         }
     }
 
-    A_S_ic_ids = malloc(SYSTEM_SIZE*sizeof(int*));
-    A_S_nz_ids = malloc(SYSTEM_SIZE*sizeof(int*));
     A_S_ids = malloc(SYSTEM_SIZE*sizeof(int*));
 
     for (i = 0; i < SYSTEM_SIZE; i++){
@@ -1086,8 +1002,6 @@ void Parse_Checklist_S(){
             else if (Checklist_S[i][j] == 2)
                 Col_nz_S[i]++;
         }
-        A_S_ic_ids[i] = malloc(Col_ic_S[i]*sizeof(int));
-        A_S_nz_ids[i] = malloc(Col_nz_S[i]*sizeof(int));
         A_S_ids[i] = malloc(Sparse_A_Size[i]*sizeof(int));
         problem.zeros[i] = malloc(Col_nz_S[i]*sizeof(int));
 
@@ -1095,13 +1009,14 @@ void Parse_Checklist_S(){
         k_nz = 0;
         k_tot = 0;
         for (j = 0; j < SYSTEM_SIZE; j++){
+
             if (Checklist_S[i][j] != 0)
                 A_S_ids[i][k_tot++] = j;
 
             if (Checklist_S[i][j] == 1)
-                A_S_ic_ids[i][k_ic++] = j;
+                k_ic++;
+
             else if (Checklist_S[i][j] == 2){
-                A_S_nz_ids[i][k_nz] = j;
                 problem.zeros[i][k_nz] = k_ic + k_nz;
                 k_nz++;
             }
@@ -1124,8 +1039,8 @@ void Convert_id_U_S(){
     for (i = 0; i < SYSTEM_SIZE; i++){
         for (j = 0; j < Col_nz_U[i]; j++)
             Col_ids_S1[i][j] = Search_For_Sparse_Column(P[i], Col_ids_U[i][j]);
-        // for (j = 0; j < Row_nz[i]; j++)
-        //     Col_ids_S2[i][j] = Search_For_Sparse_Column(Global_Row[i][j], Col_ids_S2[i][j]);
+        for (j = 0; j < Col_nz_L[i]; j++)
+            Col_ids_S2[i][j] = Search_For_Sparse_Column(P[i], Col_ids_L[i][j]);
         for (j = 0; j < Row_nz[i]; j++)
             for (k = 0; k < Col_nz_U[i]; k++)
                 Col_ids_S3[i][j][k] = Search_For_Sparse_Column(Global_Row[i][j], Col_ids_S3[i][j][k]);

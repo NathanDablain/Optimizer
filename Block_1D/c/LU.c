@@ -122,7 +122,6 @@ void Get_Stops(double **A, int N, int *P_max, int *P,
             if (A[j][i] != 0.0){
                 A[j][i] /= A[i][i];
                 Row_ids[i][row_counter] = j;
-                Col_ids_S2[i][row_counter] = i;
                 Global_Row[i][row_counter] = P_Global[j];
                 row_counter++;
                 // Need to save off what global row, row id belongs to.
@@ -155,79 +154,42 @@ void Get_Stops(double **A, int N, int *P_max, int *P,
     free(P_Global);
 }
 
-void LUDecompose(double **A, double **A_S, int N, int *P,
-                   int *Row_nz, int **Row_ids,
-                   int *Col_nz_U, int **Col_ids_U,
-                   int **Col_ids_S1, int **Col_ids_S2, int ***Col_ids_S3,
-                   double **A_L, double **A_U) {
+void LUDecompose(double **A_S, int N, int *P,
+                   int *Row_nz, int **Row_ids, int *Col_nz_U,
+                   int **Col_ids_S1, int ***Col_ids_S3) {
     int i, j, k, imax; 
     double *ptr;
-    int row_id, col_id1, col_id3;
-    int *A_L_counter = calloc(N, sizeof(int));
+    int row_id, col_id;
 
     for (i = 0; i < N; i++) {
 
         imax = P[i];
         if (imax > i) {
 
-            //pivoting rows of A
-            ptr = A[i];
-            A[i] = A[imax];
-            A[imax] = ptr;
-
             //pivoting rows of A_S
             ptr = A_S[i];
             A_S[i] = A_S[imax];
             A_S[imax] = ptr;
 
-            //pivoting rows of A_L
-            ptr = A_L[i];
-            A_L[i] = A_L[imax];
-            A_L[imax] = ptr;
-
-            //pivoting counter
-            j = A_L_counter[i];
-            A_L_counter[i] = A_L_counter[imax];
-            A_L_counter[imax] = j;
-
-        }
-
-        for (j = 0; j < Col_nz_U[i]; j++){ // This can use the same length as Col_nz_U[i], just need A_S specific column indices
-            // A_U[i][j] = A[i][Col_ids_U[i][j]];
-            A_U[i][j] = A_S[i][Col_ids_S1[i][j]];
         }
         
-        // Here Row id is the relative row below row i, it may change from the final layout in P
-        // Need to know what global row, row id is 
         for (j = 0; j < Row_nz[i]; j++) {
             row_id = Row_ids[i][j];
-            col_id1 = A_L_counter[row_id];
+            A_S[row_id][Col_ids_S3[i][j][0]] /=  A_S[i][Col_ids_S1[i][0]];
 
-            // A_L[row_id][col_id1] = A[row_id][i] / A_U[i][0]; // This is actually the same as the Row_nz, just need A_S specific column indices
-            A_L[row_id][col_id1] = A_S[row_id][Col_ids_S3[i][j][0]] / A_U[i][0];
-            A_L_counter[row_id]++;
             for (k = 1; k < Col_nz_U[i]; k++){
-                // col_id2 = Col_ids_U[i][k];
-                col_id3 = Col_ids_S3[i][j][k];
-                // A[row_id][col_id2] -= A_L[row_id][col_id1] * A_U[i][k]; // This is the same as Col_nz_U[i], can reuse A_S specific column indices from above while starting at i+1
-                A_S[row_id][col_id3] -= A_L[row_id][col_id1] * A_U[i][k];
-                // if (A[row_id][col_id2] != A_S[row_id][col_id3])
-                    // printf("HERE");
+                col_id = Col_ids_S3[i][j][k];
+                A_S[row_id][col_id] -= A_S[row_id][Col_ids_S3[i][j][0]] *  A_S[i][Col_ids_S1[i][k]];
             }
         }
     }
 
-
-    free(A_L_counter);
 }
 
-/* INPUT: A,P filled in LUPDecompose; b - rhs vector; N - dimension
- * OUTPUT: x - solution vector of A*x=b
- */
-void LUPSolve(double **A, int *P, double *b, int N, double *x,
+void LUPSolve(double **A_S, int *P, double *b, int N, double *x,
               int *Col_nz_U, int **Col_ids_U,
               int *Col_nz_L, int **Col_ids_L,
-              double **A_L, double **A_U) {
+              int **Col_ids_S1, int **Col_ids_S2) {
     int col_id;
     // forward substitution using lower matrix
     for (int i = 0; i < N; i++) {
@@ -235,18 +197,15 @@ void LUPSolve(double **A, int *P, double *b, int N, double *x,
 
         for (int k = 0; k < Col_nz_L[i]; k++){
             col_id = Col_ids_L[i][k];
-            x[i] -= A_L[i][k] * x[col_id];
-            // A[i][col_id] = 0.0;
+            x[i] -= A_S[i][Col_ids_S2[i][k]] * x[col_id];
         }
     }
     // backward substitution using upper matrix (includes diagonal)
     for (int i = N - 1; i >= 0; i--) {
         for (int k = 1; k < Col_nz_U[i]; k++){
             col_id = Col_ids_U[i][k];
-            x[i] -= A_U[i][k] * x[col_id];
-            // A[i][col_id] = 0.0;
+            x[i] -= A_S[i][Col_ids_S1[i][k]] * x[col_id];
         }
-        x[i] /= A_U[i][0];
-        // A[i][i] = 0.0;
+        x[i] /= A_S[i][Col_ids_S1[i][0]];
     }
 }
