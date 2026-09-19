@@ -237,7 +237,7 @@ sqp_results Run_SQP(){
         }
     }
     results.converged = converged;
-    results.iterations = iterations;
+    results.iterations = iterations + 1;
     results.pf = pf;
     results.df = df;
 
