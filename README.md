@@ -1,1 +1,1 @@
-Example Sequential Quadratic Programming problems solved in octave.
+Example Sequential Quadratic Programming problems solved in octave and c.
