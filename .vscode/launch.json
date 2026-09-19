@@ -8,7 +8,7 @@
             "name": "(gdb) Launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/Block_1D/Build_Debug/Block_1D_DBG.exe",
+            "program": "${workspaceFolder}/Block_1D/c/Build_Debug/Block_1D_DBG.exe",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${fileDirname}",
