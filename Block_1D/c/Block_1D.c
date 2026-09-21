@@ -531,7 +531,7 @@ void Load_First_Knot_Columns(int offset_z, int offset_c){
     problem.k1[4] = Search_For_Sparse_Column(k, j);
     problem.k1[5] = Search_For_Sparse_Column(k+1, j);
     problem.k1[6] = Search_For_Sparse_Column(k+5, j);
-    problem.k1[7] = Search_For_Sparse_Column(k+6, j); // here
+    problem.k1[7] = Search_For_Sparse_Column(k+6, j);
 
     problem.k1[8] = Search_For_Sparse_Column(j+1, k+1);
     problem.k1[9] = Search_For_Sparse_Column(j+1, k+2);

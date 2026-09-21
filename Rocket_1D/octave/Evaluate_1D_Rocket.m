@@ -16,7 +16,7 @@ hessian = [];
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%                       Evaluate cost                    %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  mu = 3.0e-2;
+  mu = 1.0e-1;
   function contribution = get_first_knot_cost(z_knot)
     contribution = -mu*(log(z_knot(5)) + log(z_knot(6)) + log(z_knot(7)));
   end
@@ -294,6 +294,7 @@ function jac_block = get_first_knot_jac(z_knot, t_knot, knot_params, z_next, t_n
   jac_block(1,2) = -h/2;
   jac_block(1,8) = 1;
   jac_block(1,9) = -h/2;
+
   jac_block(2,1) = h*(A*v1^2*c_D1*rho_part_h1 + 2*m1*g_part_h1)/...
   (4*m1);
   jac_block(2,2) = (A*h*v1*(v1*c_D_part_s1 + 2*c_D1)*rho1/4 - m1)/m1;
@@ -304,18 +305,25 @@ function jac_block = get_first_knot_jac(z_knot, t_knot, knot_params, z_next, t_n
   jac_block(2,9) = (A*h*v2*(v2*c_D_part_s2 + 2*c_D2)*rho2/4 + m2)/m2;
   jac_block(2,10) = h*(-A*v2^2*c_D2*rho2 + 2*T2)/(4*m2^2);
   jac_block(2,11) = -h/(2*m2);
+
   jac_block(3,3) = -1;
   jac_block(3,4) = h/(2*C);
   jac_block(3,10) = 1;
   jac_block(3,11) = h/(2*C);
+
   jac_block(4,3) = -1;
   jac_block(4,5) = 1;
+
   jac_block(5,4) = -1;
   jac_block(5,6) = 1;
+
   jac_block(6,4) = 1;
   jac_block(6,7) = 1;
+
   jac_block(7,1) = -1;
+
   jac_block(8,2) = -1;
+
   jac_block(9,3) = -1;
 
 end
@@ -347,6 +355,7 @@ function jac_block = get_middle_knot_jac(z_knot, t_knot, knot_params, z_next, t_
   jac_block(1,2) = -h/2;
   jac_block(1,8) = 1;
   jac_block(1,9) = -h/2;
+
   jac_block(2,1) = h*(A*v1^2*c_D1*rho_part_h1 + 2*m1*g_part_h1)/...
   (4*m1);
   jac_block(2,2) = (A*h*v1*(v1*c_D_part_s1 + 2*c_D1)*rho1/4 - m1)/m1;
@@ -357,14 +366,18 @@ function jac_block = get_middle_knot_jac(z_knot, t_knot, knot_params, z_next, t_
   jac_block(2,9) = (A*h*v2*(v2*c_D_part_s2 + 2*c_D2)*rho2/4 + m2)/m2;
   jac_block(2,10) = h*(-A*v2^2*c_D2*rho2 + 2*T2)/(4*m2^2);
   jac_block(2,11) = -h/(2*m2);
+
   jac_block(3,3) = -1;
   jac_block(3,4) = h/(2*C);
   jac_block(3,10) = 1;
   jac_block(3,11) = h/(2*C);
+
   jac_block(4,3) = -1;
   jac_block(4,5) = 1;
+
   jac_block(5,4) = -1;
   jac_block(5,6) = 1;
+
   jac_block(6,4) = 1;
   jac_block(6,7) = 1;
 
@@ -375,8 +388,10 @@ function jac_block = get_end_knot_jac
 
   jac_block(1,3) = -1;
   jac_block(1,5) = 1;
+
   jac_block(2,4) = -1;
   jac_block(2,6) = 1;
+
   jac_block(3,4) = 1;
   jac_block(3,7) = 1;
 end
@@ -437,17 +452,23 @@ function hes_block = get_first_knot_hes(z_knot, t_knot, knot_params, lambda_knot
   hes_block(1,2) = A*h*lambda2*v1*(v1*c_D_part_s + 2*c_D1)*...
   rho_part_h/(4*m1);
   hes_block(1,3) = -A*h*lambda2*v1^2*c_D1*rho_part_h/(4*m1^2);
+
   hes_block(2,1) = hes_block(1,2);
   hes_block(2,2) = A*h*lambda2*(v1^2*c_D_part_s2 + 4*v1*...
   c_D_part_s + 2*c_D1)*rho1/(4*m1);
   hes_block(2,3) = -A*h*lambda2*v1*(v1*c_D_part_s + 2*c_D1)*rho1/(4*m1^2);
+
   hes_block(3,1) = hes_block(1,3);
   hes_block(3,2) = hes_block(2,3);
   hes_block(3,3) = h*lambda2*(A*v1^2*c_D1*rho1 - 2*T1)/(2*m1^3);
   hes_block(3,4) = h*lambda2/(2*m1^2);
+
   hes_block(4,3) = hes_block(3,4);
+
   hes_block(5,5) = mu/(s_m_lb^2);
+
   hes_block(6,6) = mu/(s_T_lb^2);
+
   hes_block(7,7) = mu/(s_T_ub^2);
 end
 
@@ -477,17 +498,24 @@ function hes_block = get_middle_knot_hes(z_knot, t_knot, knot_params, lambda_kno
   hes_block(1,2) = A*h*lambda2*v1*(v1*c_D_part_s + 2*c_D1)*...
   rho_part_h/(4*m1);
   hes_block(1,3) = -A*h*lambda2*v1^2*c_D1*rho_part_h/(4*m1^2);
+
   hes_block(2,1) = hes_block(1,2);
   hes_block(2,2) = A*h*lambda2*(v1^2*c_D_part_s2 + 4*v1*...
   c_D_part_s + 2*c_D1)*rho1/(4*m1);
   hes_block(2,3) = -A*h*lambda2*v1*(v1*c_D_part_s + 2*c_D1)*rho1/(4*m1^2);
+
   hes_block(3,1) = hes_block(1,3);
   hes_block(3,2) = hes_block(2,3);
   hes_block(3,3) = h*lambda2*(A*v1^2*c_D1*rho1 - 2*T1)/(2*m1^3);
+  hes_block(3,4) = h*lambda2/(2*m1^2);
+
   hes_block(4,3) = hes_block(3,4);
   hes_block(4,3) = h*lambda2/(2*m1^2);
+
   hes_block(5,5) = mu/(s_m_lb^2);
+
   hes_block(6,6) = mu/(s_T_lb^2);
+
   hes_block(7,7) = mu/(s_T_ub^2);
 end
 
@@ -516,17 +544,23 @@ function hes_block = get_end_knot_hes(z_knot, t_knot, knot_params, lambda_knot, 
   hes_block(1,2) = A*h*lambda2*v1*(v1*c_D_part_s + 2*c_D1)*...
   rho_part_h/(4*m1);
   hes_block(1,3) = -A*h*lambda2*v1^2*c_D1*rho_part_h/(4*m1^2);
+
   hes_block(2,1) = hes_block(1,2);
   hes_block(2,2) = A*h*lambda2*(v1^2*c_D_part_s2 + 4*v1*...
   c_D_part_s + 2*c_D1)*rho1/(4*m1);
   hes_block(2,3) = -A*h*lambda2*v1*(v1*c_D_part_s + 2*c_D1)*rho1/(4*m1^2);
+
   hes_block(3,1) = hes_block(1,3);
   hes_block(3,2) = hes_block(2,3);
   hes_block(3,3) = h*lambda2*(A*v1^2*c_D1*rho1 - 2*T1)/(2*m1^3);
   hes_block(3,4) = h*lambda2/(2*m1^2);
+
   hes_block(4,3) = hes_block(3,4);
+
   hes_block(5,5) = mu/(s_m_lb^2);
+
   hes_block(6,6) = mu/(s_T_lb^2);
+
   hes_block(7,7) = mu/(s_T_ub^2);
 end
 

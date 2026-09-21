@@ -5,10 +5,10 @@ close all
 O = struct(...
   'N_states', 3,...
   'N_inputs', 1,...
-  'N_knots', 50,...
+  'N_knots', 3,...
   'N_lb', 2,...
   'N_ub', 1,...
-  'ic', [0 0 425e3 6e6],...
+  'ic', [0 0.0 425e3 6.0e6],...
   'xd', 50e3,...
   'lb', [25e3 0],...
   'ub', 8e6,...
@@ -42,6 +42,7 @@ O.t = linspace(0, O.tf, O.N_knots);
 
 % Initialize the states and slack variables
 O.z(1:length(O.ic)) = O.ic';
+O = Simulate_Rocket(O);
 
 for i = 1:O.N_knots
   knot_start = O.knot_size*(i-1) + 1;
@@ -160,6 +161,7 @@ tic
 
     if pf_satisfied && df_satisfied
       disp(['Converged in ' num2str(iterations) ' iterations'])
+      disp(['with pf of ' num2str(pf) ' and df of ' num2str(df)])
       break;
     elseif iterations == max_iterations
       disp(['Failed to converge with pf of ' num2str(pf) ' and df of ' num2str(df)])
@@ -181,15 +183,19 @@ for i = 1:O.N_knots
 end
 
 figure()
-subplot(3,1,1)
+subplot(2,2,1)
 plot(O.t, states(1,:))
 xlabel('Time (s)')
 ylabel('Altitude (m)')
-subplot(3,1,2)
+subplot(2,2,2)
 plot(O.t, states(2,:))
 xlabel('Time (s)')
 ylabel('Speed (m/s)')
-subplot(3,1,3)
+subplot(2,2,3)
+plot(O.t, states(3,:))
+xlabel('Time (s)')
+ylabel('Mass (kg)')
+subplot(2,2,4)
 plot(O.t, inputs)
 xlabel('Time (s)')
 ylabel('Thrust (N)')

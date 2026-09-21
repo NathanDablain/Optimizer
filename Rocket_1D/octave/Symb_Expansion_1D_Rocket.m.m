@@ -197,38 +197,38 @@ Lm = get_lagrangian_middle_knot(states, inputs, slack, lbs, ubs);
 Le = get_lagrangian_end_knot(states, inputs, slack, lbs, ubs, xd);
 
 clc
-disp(cf)
-for i = 1:length(cf)
-  for j = 1:length(z)
-    blockcf(i,j) = simplify(diff(cf(i), z(j)));
-    if blockcf(i,j) ~= 0
-      fprintf('jac_block(%d,%d) = %s;\n',i,j,char(blockcf(i,j)));
-    end
-  end
-end
-
-fprintf('\n\n\n')
-disp(cm)
-for i = 1:length(cm)
-  for j = 1:length(z)
-    blockcm(i,j) = simplify(diff(cm(i), z(j)));
-    if blockcm(i,j) ~= 0
-      fprintf('jac_block(%d,%d) = %s;\n',i,j,char(blockcm(i,j)));
-    end
-  end
-end
-
-fprintf('\n\n\n')
-disp(ce)
+##disp(cf)
+##for i = 1:length(cf)
+##  for j = 1:length(z)
+##    blockcf(i,j) = simplify(diff(cf(i), z(j)));
+##    if blockcf(i,j) ~= 0
+##      fprintf('jac_block(%d,%d) = %s;\n',i,j,char(blockcf(i,j)));
+##    end
+##  end
+##end
+##
+##fprintf('\n\n\n')
+##disp(cm)
+##for i = 1:length(cm)
+##  for j = 1:length(z)
+##    blockcm(i,j) = simplify(diff(cm(i), z(j)));
+##    if blockcm(i,j) ~= 0
+##      fprintf('jac_block(%d,%d) = %s;\n',i,j,char(blockcm(i,j)));
+##    end
+##  end
+##end
+##
+##fprintf('\n\n\n')
+##disp(ce)
 z = [p1 v1 m1 T1 s_m_lb s_T_lb s_T_ub];
-for i = 1:length(ce)
-  for j = 1:length(z)
-    blockce(i,j) = simplify(diff(ce(i), z(j)));
-    if blockce(i,j) ~= 0
-      fprintf('jac_block(%d,%d) = %s;\n',i,j,char(blockce(i,j)));
-    end
-  end
-end
+##for i = 1:length(ce)
+##  for j = 1:length(z)
+##    blockce(i,j) = simplify(diff(ce(i), z(j)));
+##    if blockce(i,j) ~= 0
+##      fprintf('jac_block(%d,%d) = %s;\n',i,j,char(blockce(i,j)));
+##    end
+##  end
+##end
 
 fprintf('\n\n\n')
 disp(Lf)
@@ -246,34 +246,34 @@ for i = 1:length(z)
   end
 end
 
-fprintf('\n\n\n')
-disp(Lm)
-for i = 1:length(z)
-  for j = 1:length(z)
-    dif1 = diff(Lm, z(i));
-    blocklm(i,j) = simplify(diff(dif1, z(j)));
-    if blocklm(i,j) ~= 0
-      if i > j
-        fprintf('hes_block(%d,%d) = hes_block(%d,%d);\n',i,j,j,i);
-      else
-        fprintf('hes_block(%d,%d) = %s;\n',i,j,char(blocklm(i,j)));
-      end
-    end
-  end
-end
-
-fprintf('\n\n\n')
-disp(Le)
-for i = 1:length(z)
-  for j = 1:length(z)
-    dif1 = diff(Le, z(i));
-    blockle(i,j) = simplify(diff(dif1, z(j)));
-    if blockle(i,j) ~= 0
-      if i > j
-        fprintf('hes_block(%d,%d) = hes_block(%d,%d);\n',i,j,j,i);
-      else
-        fprintf('hes_block(%d,%d) = %s;\n',i,j,char(blockle(i,j)));
-      end
-    end
-  end
-end
+##fprintf('\n\n\n')
+##disp(Lm)
+##for i = 1:length(z)
+##  for j = 1:length(z)
+##    dif1 = diff(Lm, z(i));
+##    blocklm(i,j) = simplify(diff(dif1, z(j)));
+##    if blocklm(i,j) ~= 0
+##      if i > j
+##        fprintf('hes_block(%d,%d) = hes_block(%d,%d);\n',i,j,j,i);
+##      else
+##        fprintf('hes_block(%d,%d) = %s;\n',i,j,char(blocklm(i,j)));
+##      end
+##    end
+##  end
+##end
+##
+##fprintf('\n\n\n')
+##disp(Le)
+##for i = 1:length(z)
+##  for j = 1:length(z)
+##    dif1 = diff(Le, z(i));
+##    blockle(i,j) = simplify(diff(dif1, z(j)));
+##    if blockle(i,j) ~= 0
+##      if i > j
+##        fprintf('hes_block(%d,%d) = hes_block(%d,%d);\n',i,j,j,i);
+##      else
+##        fprintf('hes_block(%d,%d) = %s;\n',i,j,char(blockle(i,j)));
+##      end
+##    end
+##  end
+##end
