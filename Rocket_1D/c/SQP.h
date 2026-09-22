@@ -1,6 +1,7 @@
 #ifndef SQP_H
 #define SQP_H
 
+#include <time.h>
 #include <stdbool.h>
 
 typedef struct{
@@ -8,6 +9,7 @@ typedef struct{
     double df;
     int iterations;
     bool converged;
+    struct timespec time_load, time_elim, time_subs, time_extract, time_alpha, time_update;
 }sqp_results;
 
 void Initial_Problem_Data();

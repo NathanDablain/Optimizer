@@ -107,7 +107,7 @@ O.z(1:length(O.ic)) = O.ic;
 for i = 1:O.N_knots
   knot_start = O.knot_size*(i-1) + 1;
   knot_end = O.knot_size*i;
-  O.z(knot_start+4) = 6.0e6;
+  O.z(knot_start+3) = 6.0e6;
   if i > 1
     O.z(knot_start:knot_start+2) = z_knot(1:3) + dx'*(O.t(i) - O.t(i-1));
   end

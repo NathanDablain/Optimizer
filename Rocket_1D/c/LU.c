@@ -176,8 +176,6 @@ void LUDecompose(double **A_S, int N, int *P,
         
         for (j = 0; j < Row_nz[i]; j++) {
             row_id = Row_ids[i][j];
-            if (A_S[i][Col_ids_S1[i][0]] == 0.0)
-                printf("HERE");
             A_S[row_id][Col_ids_S3[i][j][0]] /=  A_S[i][Col_ids_S1[i][0]];
 
             for (k = 1; k < Col_nz_U[i]; k++){

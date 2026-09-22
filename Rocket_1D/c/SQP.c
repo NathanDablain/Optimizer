@@ -153,6 +153,7 @@ void Cleanup(){
         free(Col_ids_L[i]);
 
         free(A_S[i]);
+        free(A_S_ids[i]);
         free(Checklist_S[i]);
         free(Col_ids_S1[i]);
         free(Col_ids_S2[i]);
@@ -171,6 +172,7 @@ void Cleanup(){
     free(Col_ids_L);
 
     free(A_S);
+    free(A_S_ids);
     free(Checklist_S);
     free(Col_ids_S1);
     free(Col_ids_S2);
@@ -195,37 +197,36 @@ sqp_results Run_SQP(){
     // Load A and b matrices
     Load_Problem_Data(A_S, b, z, lambda, h, true);
     Fill_A_S_Zeros();
-    // for (i = 0; i < SYSTEM_SIZE; i++){
-    //     printf("Row %d: ", i);
-    //     for (int j = 0; j < Sparse_A_Size[i]; j++){
-    //         printf(" %.2e ", A_S[i][j]);
-    //     }
-    //     printf("\n");
-    // }
+    timespec_get(&results.time_load, TIME_UTC);
+
     for (iterations = 0; iterations < max_iterations; iterations++){
 
         // Setup A in form A=(L-E)+U by partial pivoting and eliminating
         LUDecompose(A_S, SYSTEM_SIZE, P_max,
                     Row_nz, Row_ids, Col_nz_U,
                     Col_ids_S1, Col_ids_S3);
+        timespec_get(&results.time_elim, TIME_UTC);
 
         // Perform forward and backward substitution to solve for x
         LUPSolve(A_S, P, b, SYSTEM_SIZE, x,
                 Col_nz_U, Col_ids_U,
                 Col_nz_L, Col_ids_L,
                 Col_ids_S1, Col_ids_S2);
+        timespec_get(&results.time_subs, TIME_UTC);
 
         // A_S has been permuted, reset it so our columns line up
         Reset_A_S();
 
         // Extract change in decision variables and new lagrange multipliers from x
-        memcpy(delta_z, x, N_DECISION_VARIABLES*sizeof(double));
+        memcpy(delta_z, &x[0], N_DECISION_VARIABLES*sizeof(double));
         memcpy(lambda_new, &x[N_DECISION_VARIABLES], N_CONSTRAINTS*sizeof(double));
         for (i = 0; i < N_CONSTRAINTS; i++)
             delta_lambda[i] = lambda_new[i] - lambda[i];
+        timespec_get(&results.time_extract, TIME_UTC);
 
         // Check slack variables and perform ternary search to determine what value of alpha to use
         double alpha = Select_Alpha(z, delta_z);
+        timespec_get(&results.time_alpha, TIME_UTC);
 
         // Update decision variables and lagrange multipliers with selected alpha
         for (i = 0; i < N_DECISION_VARIABLES; i++)
@@ -245,6 +246,7 @@ sqp_results Run_SQP(){
             converged = true;
             break;
         }
+        timespec_get(&results.time_update, TIME_UTC);
     }
     results.converged = converged;
     results.iterations = iterations + 1;
@@ -262,8 +264,8 @@ double Primary_Feasability_Check(){
     max_eq = 0.0;
     for (i = 0; i < N_CONSTRAINTS; i++){
         eq[i] = -b[N_DECISION_VARIABLES+i];
-        if (eq[i] > max_eq)
-            max_eq = eq[i];
+        if (fabs(eq[i]) > max_eq)
+            max_eq = fabs(eq[i]);
     }
 
     return max_eq;

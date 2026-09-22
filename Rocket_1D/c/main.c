@@ -10,8 +10,6 @@
 
 int plot_flag = 1;
 
-struct timespec time_load, time_elim, time_subs, time_extract, time_alpha, time_update;
-
 int main(){
     int i;
     struct timespec time_start, time_end;
@@ -45,9 +43,22 @@ int main(){
     if (plot_flag) system("gnuplot plotter.plt");
 
     double time_elapsed = (double)(time_end.tv_sec - time_start.tv_sec) + (double)(time_end.tv_nsec - time_start.tv_nsec)/1.0e9;
+    // double time_load = (double)(results.time_load.tv_sec - time_start.tv_sec) + (double)(results.time_load.tv_nsec - time_start.tv_nsec)/1.0e9;
+    // double time_elim = (double)(results.time_elim.tv_sec - results.time_load.tv_sec) + (double)(results.time_elim.tv_nsec - results.time_load.tv_nsec)/1.0e9;
+    // double time_subs = (double)(results.time_subs.tv_sec - results.time_elim.tv_sec) + (double)(results.time_subs.tv_nsec - results.time_elim.tv_nsec)/1.0e9;
+    // double time_extract = (double)(results.time_extract.tv_sec - results.time_subs.tv_sec) + (double)(results.time_extract.tv_nsec - results.time_subs.tv_nsec)/1.0e9;
+    // double time_alpha = (double)(results.time_alpha.tv_sec - results.time_extract.tv_sec) + (double)(results.time_alpha.tv_nsec - results.time_extract.tv_nsec)/1.0e9;
+    // double time_update = (double)(results.time_update.tv_sec - results.time_alpha.tv_sec) + (double)(results.time_update.tv_nsec - results.time_alpha.tv_nsec)/1.0e9;
 
     printf("\n\n");
     printf("%.9f seconds elapsed\n", time_elapsed);
+    // printf("%.9f seconds loading\n", time_load);
+    // printf("%.9f seconds eliminating\n", time_elim);
+    // printf("%.9f seconds substituting\n", time_subs);
+    // printf("%.9f seconds extracting\n", time_extract);
+    // printf("%.9f seconds solving alpha\n", time_alpha);
+    // printf("%.9f seconds updating\n", time_update);
+
     if (results.converged)
         printf("Converged in %d iterations\n", results.iterations);
     else

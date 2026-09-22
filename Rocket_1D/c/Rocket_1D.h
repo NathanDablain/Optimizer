@@ -5,7 +5,7 @@
 
 #define N_STATES 3
 #define N_INPUTS 1
-#define N_KNOTS 3
+#define N_KNOTS 75
 #define N_LBS 2
 #define N_UBS 1
 #define FIRST_KNOT_CONSTRAINTS 9

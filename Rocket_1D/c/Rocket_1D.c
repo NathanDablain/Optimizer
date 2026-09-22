@@ -63,18 +63,18 @@ void Simulate_Rocket(double *z, double *dt){
     double h, v, m;
     int i, offset_z;
 
-    for (i = 0; i < N_KNOTS-1; i++){
+    for (i = 0; i < N_KNOTS; i++){
         offset_z = i*KNOT_SIZE;
+        z[offset_z+3] = Shooting_Thrust;
+        if (i > 0){
+            z[offset_z] = h + dt[i-1]*problem.knot_params.dx[i-1][0];
+            z[offset_z+1] = v + dt[i-1]*problem.knot_params.dx[i-1][1];
+            z[offset_z+2] = m + dt[i-1]*problem.knot_params.dx[i-1][2];
+        }
+        Get_Knot_Params(z, offset_z, i);
         h = z[offset_z];
         v = z[offset_z+1];
         m = z[offset_z+2];
-        z[offset_z+3] = Shooting_Thrust;
-        Get_Knot_Params(z, offset_z, i);
-        offset_z = (i+1)*KNOT_SIZE;
-        z[offset_z] = h + dt[i]*problem.knot_params.dx[i][0];
-        z[offset_z+1] = v + dt[i]*problem.knot_params.dx[i][1];
-        z[offset_z+2] = m + dt[i]*problem.knot_params.dx[i][2];
-        z[offset_z+3] = Shooting_Thrust;
     }
 }
 
@@ -244,11 +244,11 @@ void First_Knot_Jacobian(double **A, double *z, double *h, int knot, int offset_
         A[j+1][problem.k1[8]] = MAX(h[knot]*(c_A*v1*v1*c_D1*rho_part_h1 + 2.0*m1*g_part_h1)/(4*m1),A_MIN);
         A[j+1][problem.k1[9]] = MAX((c_A*h[knot]*v1*(v1*c_D_part_s1 + 2.0*c_D1)*rho1/4.0 - m1)/m1,A_MIN);
         A[j+1][problem.k1[10]] = MAX(h[knot]*(-c_A*v1*v1*c_D1*rho1 + 2.0*T1)/(4*m1*m1),A_MIN);
-        A[j+1][problem.k1[11]] = c1*m1;
+        A[j+1][problem.k1[11]] = c1/m1;
         A[j+1][problem.k1[12]] = MAX(h[knot]*(c_A*v2*v2*c_D2*rho_part_h2 + 2.0*m2*g_part_h2)/(4*m2),A_MIN);
         A[j+1][problem.k1[13]] = MAX((c_A*h[knot]*v2*(v2*c_D_part_s2 + 2.0*c_D2)*rho2/4.0 + m2)/m2,A_MIN);
         A[j+1][problem.k1[14]] = MAX(h[knot]*(-c_A*v2*v2*c_D2*rho2 + 2.0*T2)/(4*m2*m2),A_MIN);
-        A[j+1][problem.k1[15]] = c1*m2;
+        A[j+1][problem.k1[15]] = c1/m2;
         A[k][problem.k1[16]] = A[j+1][problem.k1[8]];
         A[k+1][problem.k1[17]] = A[j+1][problem.k1[9]];
         A[k+2][problem.k1[18]] = A[j+1][problem.k1[10]];
@@ -304,11 +304,11 @@ void First_Knot_Jacobian(double **A, double *z, double *h, int knot, int offset_
         A[j+1][k] = MAX(h[knot]*(c_A*v1*v1*c_D1*rho_part_h1 + 2.0*m1*g_part_h1)/(4*m1),A_MIN);
         A[j+1][k+1] = MAX((c_A*h[knot]*v1*(v1*c_D_part_s1 + 2.0*c_D1)*rho1/4.0 - m1)/m1,A_MIN);
         A[j+1][k+2] = MAX(h[knot]*(-c_A*v1*v1*c_D1*rho1 + 2.0*T1)/(4*m1*m1),A_MIN);
-        A[j+1][k+3] = MAX(c1*m1,A_MIN);
+        A[j+1][k+3] = MAX(c1/m1,A_MIN);
         A[j+1][k+7] = MAX(h[knot]*(c_A*v2*v2*c_D2*rho_part_h2 + 2.0*m2*g_part_h2)/(4*m2),A_MIN);
         A[j+1][k+8] = MAX((c_A*h[knot]*v2*(v2*c_D_part_s2 + 2.0*c_D2)*rho2/4.0 + m2)/m2,A_MIN);
         A[j+1][k+9] = MAX(h[knot]*(-c_A*v2*v2*c_D2*rho2 + 2.0*T2)/(4*m2*m2),A_MIN);
-        A[j+1][k+10] = MAX(c1*m2,A_MIN);
+        A[j+1][k+10] = MAX(c1/m2,A_MIN);
         A[k][j+1] = A[j+1][k];
         A[k+1][j+1] = A[j+1][k+1];
         A[k+2][j+1] = A[j+1][k+2];
@@ -396,11 +396,11 @@ void Middle_Knot_Jacobian(double **A, double *z, double *h, int knot, int offset
         A[j+1][problem.km[knot-1][8]] = MAX(h[knot]*(c_A*v1*v1*c_D1*rho_part_h1 + 2.0*m1*g_part_h1)/(4*m1),A_MIN);
         A[j+1][problem.km[knot-1][9]] = MAX((c_A*h[knot]*v1*(v1*c_D_part_s1 + 2.0*c_D1)*rho1/4.0 - m1)/m1,A_MIN);
         A[j+1][problem.km[knot-1][10]] = MAX(h[knot]*(-c_A*v1*v1*c_D1*rho1 + 2.0*T1)/(4*m1*m1),A_MIN);
-        A[j+1][problem.km[knot-1][11]] = c1*m1;
+        A[j+1][problem.km[knot-1][11]] = c1/m1;
         A[j+1][problem.km[knot-1][12]] = MAX(h[knot]*(c_A*v2*v2*c_D2*rho_part_h2 + 2.0*m2*g_part_h2)/(4*m2),A_MIN);
         A[j+1][problem.km[knot-1][13]] = MAX((c_A*h[knot]*v2*(v2*c_D_part_s2 + 2.0*c_D2)*rho2/4.0 + m2)/m2,A_MIN);
         A[j+1][problem.km[knot-1][14]] = MAX(h[knot]*(-c_A*v2*v2*c_D2*rho2 + 2.0*T2)/(4*m2*m2),A_MIN);
-        A[j+1][problem.km[knot-1][15]] = c1*m2;
+        A[j+1][problem.km[knot-1][15]] = c1/m2;
         A[k][problem.km[knot-1][16]] = A[j+1][problem.km[knot-1][8]];
         A[k+1][problem.km[knot-1][17]] = A[j+1][problem.km[knot-1][9]];
         A[k+2][problem.km[knot-1][18]] = A[j+1][problem.km[knot-1][10]];
@@ -447,11 +447,11 @@ void Middle_Knot_Jacobian(double **A, double *z, double *h, int knot, int offset
         A[j+1][k] = MAX(h[knot]*(c_A*v1*v1*c_D1*rho_part_h1 + 2.0*m1*g_part_h1)/(4*m1),A_MIN);
         A[j+1][k+1] = MAX((c_A*h[knot]*v1*(v1*c_D_part_s1 + 2.0*c_D1)*rho1/4.0 - m1)/m1,A_MIN);
         A[j+1][k+2] = MAX(h[knot]*(-c_A*v1*v1*c_D1*rho1 + 2.0*T1)/(4*m1*m1),A_MIN);
-        A[j+1][k+3] = MAX(c1*m1,A_MIN);
+        A[j+1][k+3] = MAX(c1/m1,A_MIN);
         A[j+1][k+7] = MAX(h[knot]*(c_A*v2*v2*c_D2*rho_part_h2 + 2.0*m2*g_part_h2)/(4*m2),A_MIN);
         A[j+1][k+8] = MAX((c_A*h[knot]*v2*(v2*c_D_part_s2 + 2.0*c_D2)*rho2/4.0 + m2)/m2,A_MIN);
         A[j+1][k+9] = MAX(h[knot]*(-c_A*v2*v2*c_D2*rho2 + 2.0*T2)/(4*m2*m2),A_MIN);
-        A[j+1][k+10] = MAX(c1*m2,A_MIN);
+        A[j+1][k+10] = MAX(c1/m2,A_MIN);
         A[k][j+1] = A[j+1][k];
         A[k+1][j+1] = A[j+1][k+1];
         A[k+2][j+1] = A[j+1][k+2];
