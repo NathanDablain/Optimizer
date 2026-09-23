@@ -1,15 +1,17 @@
-function [O, O2] = Simulate_Rocket(O, O2)
+function O = Simulate_Rocket(O)
 
 A = 0.25;
 function knot_params = get_knot_params(z_knot, t_knot)
   gravity0 = 9.8065;
   Re = 6371e3;
+  h = -z_knot(3);
+  s = z_knot(4);
 
-  knot_params.g = gravity0*((Re/(Re + z_knot(3)))^2);
-  knot_params.g_part_h = -2*Re*gravity0/((Re + z_knot(3))^3);
-  knot_params.g_part_h2 = (6*Re*gravity0)/((Re + z_knot(3))^4);
+  knot_params.g = gravity0*((Re/(Re + h))^2);
+  knot_params.g_part_h = -2*Re*gravity0/((Re + h)^3);
+  knot_params.g_part_h2 = (6*Re*gravity0)/((Re + h)^4);
 
-  if z_knot(3) < 11000
+  if h < 11000
     c1 = 15.04;
     c2 = 0.00649;
     c3 = 101.29;
@@ -17,15 +19,15 @@ function knot_params = get_knot_params(z_knot, t_knot)
     c5 = 288.08;
     c6 = 5.256;
     c7 = 0.2869;
-    Temperature = c1 - c2*z_knot(3);
+    Temperature = c1 - c2*h;
     Pressure =c3*(((Temperature+c4)/c5)^c6);
 
-    knot_params.rho_part_h = (c2*c3*((c1 - c2*z_knot(3) + c4)/c5)^c6*...
-                             (1 - c6))/(c7*(c1-c2*z_knot(3)+c4)^2);
+    knot_params.rho_part_h = (c2*c3*((c1 - c2*h + c4)/c5)^c6*...
+                             (1 - c6))/(c7*(c1-c2*h+c4)^2);
 
-    knot_params.rho_part_h2 = (c2^2*c3*((c1 - c2*z_knot(3) + c4)/c5)^c6*...
-                             (c6 - 1)*(c6 - 2))/(c7*(c1-c2*z_knot(3)+c4)^3);
-  elseif z_knot(3) >= 11000 && z_knot(3) < 25000
+    knot_params.rho_part_h2 = (c2^2*c3*((c1 - c2*h + c4)/c5)^c6*...
+                             (c6 - 1)*(c6 - 2))/(c7*(c1-c2*h+c4)^3);
+  elseif h >= 11000 && h < 25000
     c1 = -56.46;
     c2 = 22.65;
     c3 = 1.73;
@@ -33,10 +35,10 @@ function knot_params = get_knot_params(z_knot, t_knot)
     c5 = 0.2869;
     c6 = 273.1;
     Temperature = c1;
-    Pressure = c2*exp(c3 - c4*z_knot(3));
+    Pressure = c2*exp(c3 - c4*h);
 
-    knot_params.rho_part_h = (-c2*c4*exp(c3 - c4*z_knot(3)))/(c5*(c1+c6));
-    knot_params.rho_part_h2 = (c2*c4^2*exp(c3 - c4*z_knot(3)))/(c5*(c1+c6));
+    knot_params.rho_part_h = (-c2*c4*exp(c3 - c4*h))/(c5*(c1+c6));
+    knot_params.rho_part_h2 = (c2*c4^2*exp(c3 - c4*h))/(c5*(c1+c6));
   else
     c1 = -131.21;
     c2 = 0.00299;
@@ -45,18 +47,18 @@ function knot_params = get_knot_params(z_knot, t_knot)
     c5 = 216.6;
     c6 = -11.388;
     c7 = 0.2869;
-    Temperature = c1 + c2*z_knot(3);
+    Temperature = c1 + c2*h;
     Pressure = c3*(((Temperature+c4)/c5)^c6);
 
-    knot_params.rho_part_h = (c2*c3*((c1 + c2*z_knot(3) + c4)/c5)^c6*...
-                             (c6 - 1))/(c7*(c1+c2*z_knot(3)+c4)^2);
-    knot_params.rho_part_h2 = (c2^2*c3*((c1 + c2*z_knot(3) + c4)/c5)^c6*...
-                             (c6 - 1)*(c6 - 2))/(c7*(c1+c2*z_knot(3)+c4)^3);
+    knot_params.rho_part_h = (c2*c3*((c1 + c2*h + c4)/c5)^c6*...
+                             (c6 - 1))/(c7*(c1+c2*h+c4)^2);
+    knot_params.rho_part_h2 = (c2^2*c3*((c1 + c2*h + c4)/c5)^c6*...
+                             (c6 - 1)*(c6 - 2))/(c7*(c1+c2*h+c4)^3);
   end
   knot_params.rho = Pressure/(0.2869*(Temperature+273.1));
 
   speed_of_sound = sqrt(1.4*287*(Temperature+273.1));
-  Mach = z_knot(4) / speed_of_sound;
+  Mach = s / speed_of_sound;
   if Mach < 0.8
     knot_params.c_D = 0.22;
 
@@ -68,16 +70,16 @@ function knot_params = get_knot_params(z_knot, t_knot)
     c3 = 0.8;
     knot_params.c_D = c1 + c2*sin(pi*(Mach - c3)/c3)^2;
 
-    knot_params.c_D_part_s = (pi*c2*sin(2*pi*z_knot(4)/(speed_of_sound*c3)))/(speed_of_sound*c3);
-    knot_params.c_D_part_s2 = (2*pi^2*c2*cos((2*pi*z_knot(4))/(speed_of_sound*c3)))/(speed_of_sound^2*c3^2);
+    knot_params.c_D_part_s = (pi*c2*sin(2*pi*s/(speed_of_sound*c3)))/(speed_of_sound*c3);
+    knot_params.c_D_part_s2 = (2*pi^2*c2*cos((2*pi*s)/(speed_of_sound*c3)))/(speed_of_sound^2*c3^2);
   elseif Mach >= 1.2
     c1 = 0.25;
     c2 = 0.54;
     c3 = 1.2;
     knot_params.c_D = c1 + c2/(Mach^c3);
 
-    knot_params.c_D_part_s = (-c2*c3*((z_knot(4)/speed_of_sound)^-c3))/z_knot(4);
-    knot_params.c_D_part_s2 = (c2*c3*((z_knot(4)/speed_of_sound)^-c3)*(c3 + 1))/(z_knot(4)^2);
+    knot_params.c_D_part_s = (-c2*c3*((s/speed_of_sound)^-c3))/s;
+    knot_params.c_D_part_s2 = (c2*c3*((s/speed_of_sound)^-c3)*(c3 + 1))/(s^2);
   end
 
   % Made up thrust mass tables to take us supersonic
@@ -94,21 +96,7 @@ function knot_params = get_knot_params(z_knot, t_knot)
 
 end
 
-
 function dx = get_dx(z_knot, knot_params)
-
-  Drag = 0.5*knot_params.c_D*knot_params.rho*A*z_knot(4)*z_knot(4);
-
-  dx(1) = z_knot(4) * cos(z_knot(6)) * cos(z_knot(5));
-  dx(2) = z_knot(4) * cos(z_knot(6)) * sin(z_knot(5));
-  dx(3) = z_knot(4) * sin(z_knot(6));
-  dx(4) = ((knot_params.T - Drag)/knot_params.m) - (knot_params.g*sin(z_knot(6)));
-  dx(5) = (knot_params.rho * A * z_knot(4) * z_knot(7)) / (knot_params.m * 2 * cos(z_knot(6)));
-  dx(6) = ((0.5 * knot_params.rho * A * z_knot(4) * z_knot(8))/knot_params.m) - ((knot_params.g * cos(z_knot(6))) / z_knot(4));
-
-end
-
-function dx = get_dx_q(z_knot, knot_params)
   s = z_knot(4);
   q0 = z_knot(5);
   q1 = z_knot(6);
@@ -137,27 +125,19 @@ end
 params(1:O.N_knots) = struct('T', 0, 'm', 0, 'g', 0, 'rho', 0, 'c_D', 0,...
                                'g_part_h', 0, 'rho_part_h', 0, 'c_D_part_s', 0,...
                                'g_part_h2', 0, 'rho_part_h2', 0, 'c_D_part_s2', 0);
-O.z(1:length(O.ic)) = O.ic;
-O2.z(1:length(O2.ic)) = O2.ic;
+
 for i = 1:O.N_knots
   knot_start = O.knot_size*(i-1) + 1;
   knot_end = O.knot_size*i;
-  knot_start2 = O2.knot_size*(i-1) + 1;
-  knot_end2 = O2.knot_size*i;
-  O.z(knot_start+6) = 0.0;
-  O.z(knot_start+7) = 0.0;
-  O2.z(knot_start+8) = 0.5;
-  O2.z(knot_start+9) = 0.0;
+  O.z(knot_start+8) = 0.0;
+  O.z(knot_start+9) = 0.0;
   if i > 1
-    O.z(knot_start:knot_start+5) = z_knot(1:6) + dx'*(O.t(i) - O.t(i-1));
-    O2.z(knot_start2:knot_start2+7) = z_knot2(1:8) + dx2'*(O2.t(i) - O2.t(i-1));
-    O2.z(knot_start2+4:knot_start2+7) = O2.z(knot_start2+4:knot_start2+7)./norm(O2.z(knot_start2+4:knot_start2+7));
+    O.z(knot_start:knot_start+7) = z_knot(1:8) + dx'*(O.t(i) - O.t(i-1));
+    O.z(knot_start+4:knot_start+7) = O.z(knot_start+4:knot_start+7)./norm(O.z(knot_start+4:knot_start+7));
   end
   z_knot = O.z(knot_start:knot_end);
-  z_knot2 = O2.z(knot_start2:knot_end2);
   params(i) = get_knot_params(z_knot, O.t(i));
   dx = get_dx(z_knot, params(i));
-  dx2 = get_dx_q(z_knot2, params(i));
 end
 
 end
