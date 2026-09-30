@@ -11,16 +11,16 @@ sparse_data = struct('rows', [], 'cols', [], 'data', []);
 %%                       Evaluate cost                    %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   mu = 1.0e-7;
-  function contribution = get_first_knot_cost(z_knot)
-    contribution = -mu*(log(z_knot(4)) + log(z_knot(5)));
+  function contribution = get_first_knot_cost(z_knot, lb, ub)
+    contribution = -mu*(log(z_knot(3) - lb(1)) + log(ub(1) - z_knot(3)));
   end
 
-  function contribution = get_middle_knot_cost(z_knot)
-    contribution = -mu*(log(z_knot(4)) + log(z_knot(5)));
+  function contribution = get_middle_knot_cost(z_knot, lb, ub)
+    contribution = -mu*(log(z_knot(3) - lb(1)) + log(ub(1) - z_knot(3)));
   end
 
-  function contribution = get_end_knot_cost(z_knot, xd)
-    contribution = (z_knot(1) - xd(1))^2 + (z_knot(2) - xd(2))^2 - mu*(log(z_knot(4)) + log(z_knot(5)));
+  function contribution = get_end_knot_cost(z_knot, xd, lb, ub)
+    contribution = (z_knot(1) - xd(1))^2 + (z_knot(2) - xd(2))^2 - mu*(log(z_knot(3) - lb(1)) + log(ub(1) - z_knot(3)));
   end
 
 if option.eval_cost
@@ -30,11 +30,11 @@ if option.eval_cost
     z_end = O.knot_size*i;
     z_knot = O.z(z_start:z_end);
     if i == 1
-      knot_cost_contribution = get_first_knot_cost(z_knot);
+      knot_cost_contribution = get_first_knot_cost(z_knot, O.lb, O.ub);
     elseif i == O.N_knots
-      knot_cost_contribution = get_end_knot_cost(z_knot, O.xd);
+      knot_cost_contribution = get_end_knot_cost(z_knot, O.xd, O.lb, O.ub);
     else
-      knot_cost_contribution = get_middle_knot_cost(z_knot);
+      knot_cost_contribution = get_middle_knot_cost(z_knot, O.lb, O.ub);
     end
     cost = cost + knot_cost_contribution;
   end
@@ -44,24 +44,21 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%      Evaluate cost gradient wrt decision variables     %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-function grad_vec = get_first_knot_grad(z_knot)
+function grad_vec = get_first_knot_grad(z_knot, lb, ub)
   grad_vec = zeros(length(z_knot), 1);
-  grad_vec(4) = -mu / z_knot(4);
-  grad_vec(5) = -mu / z_knot(5);
+  grad_vec(3) = (-mu/(z_knot(3)-ub(1))) + (mu/(lb(1) - z_knot(3)));
 end
 
-function grad_vec = get_middle_knot_grad(z_knot)
+function grad_vec = get_middle_knot_grad(z_knot, lb, ub)
   grad_vec = zeros(length(z_knot), 1);
-  grad_vec(4) = -mu / z_knot(4);
-  grad_vec(5) = -mu / z_knot(5);
+  grad_vec(3) = (-mu/(z_knot(3)-ub(1))) + (mu/(lb(1) - z_knot(3)));
 end
 
-function grad_vec = get_end_knot_grad(z_knot, xd)
+function grad_vec = get_end_knot_grad(z_knot, xd, lb, ub)
   grad_vec = zeros(length(z_knot), 1);
   grad_vec(1) = 2.0 * z_knot(1) - 2.0 * xd(1);
   grad_vec(2) = 2.0 * z_knot(2) - 2.0 * xd(2);
-  grad_vec(4) = -mu / z_knot(4);
-  grad_vec(5) = -mu / z_knot(5);
+  grad_vec(3) = (-mu/(z_knot(3)-ub(1))) + (mu/(lb(1) - z_knot(3)));
 end
 
 if option.eval_grad
@@ -71,11 +68,11 @@ if option.eval_grad
     z_end = O.knot_size*i;
     z_knot = O.z(z_start:z_end);
     if i == 1
-      grad_vec = get_first_knot_grad(z_knot);
+      grad_vec = get_first_knot_grad(z_knot, O.lb, O.ub);
     elseif i == O.N_knots
-      grad_vec = get_end_knot_grad(z_knot, O.xd);
+      grad_vec = get_end_knot_grad(z_knot, O.xd, O.lb, O.ub);
     else
-      grad_vec = get_middle_knot_grad(z_knot);
+      grad_vec = get_middle_knot_grad(z_knot, O.lb, O.ub);
     end
     grad(z_start:z_end) = grad_vec;
   end
@@ -100,11 +97,6 @@ function eq_vec = get_first_knot_eq(z_knot, t_knot, z_next, t_next, lb, ub, ic)
             % the trapezoidal constraints for the knot
             z_next(1) - z_knot(1) - 0.5*h*(dx1(1) + dx2(1));...
             z_next(2) - z_knot(2) - 0.5*h*(dx1(2) + dx2(2));...
-            % the slack variable constraints for the knot
-            % first lower bound
-            lb(1) - z_knot(3) + z_knot(4);...
-            % then upper bound
-            z_knot(3) - ub(1) + z_knot(5);...
             % the initial condition constraints for the knot
             ic(1) - z_knot(1);...
             ic(2) - z_knot(2)];
@@ -119,22 +111,12 @@ function eq_vec = get_middle_knot_eq(z_knot, t_knot, z_next, t_next, lb, ub)
   eq_vec = [...
             % the trapezoidal constraints for the knot
             z_next(1) - z_knot(1) - 0.5*h*(dx1(1) + dx2(1));...
-            z_next(2) - z_knot(2) - 0.5*h*(dx1(2) + dx2(2));...
-            % the slack variable constraints for the knot
-            % first lower bound
-            lb(1) - z_knot(3) + z_knot(4);...
-            % then upper bound
-            z_knot(3) - ub(1) + z_knot(5)];
+            z_next(2) - z_knot(2) - 0.5*h*(dx1(2) + dx2(2))];
 end
 
 function eq_vec = get_end_knot_eq(z_knot, t_knot, lb, ub)
+  eq_vec = [];
 
-  eq_vec = [...
-            % the slack variable constraints for the knot
-            % first lower bound
-            lb(1) - z_knot(3) + z_knot(4);...
-            % then upper bound
-            z_knot(3) - ub(1) + z_knot(5)];
 end
 if option.eval_eq
   eq = zeros(O.N_constraints, 1);
@@ -167,60 +149,44 @@ end
 %% Evaluate jacobian of constraints wrt decision variables%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function jac_block = get_first_knot_jac(z_knot, t_knot, z_next, t_next)
-  jac_block = zeros(6, 8);
+  jac_block = zeros(4, 6);
   h = t_next - t_knot;
 
   jac_block(1,1) = -1;
   jac_block(1,2) = -h/2;
-  jac_block(1,6) = 1;
-  jac_block(1,7) = -h/2;
+  jac_block(1,4) = 1;
+  jac_block(1,5) = -h/2;
 
   jac_block(2,2) = -1;
   jac_block(2,3) = -h/2;
-  jac_block(2,7) = 1;
-  jac_block(2,8) = -h/2;
+  jac_block(2,5) = 1;
+  jac_block(2,6) = -h/2;
 
-  jac_block(3,3) = -1;
-  jac_block(3,4) = 1;
+  jac_block(3,1) = -1;
 
-  jac_block(4,3) = 1;
-  jac_block(4,5) = 1;
-
-  jac_block(5,1) = -1;
-
-  jac_block(6,2) = -1;
+  jac_block(4,2) = -1;
 
 end
 
 function jac_block = get_middle_knot_jac(z_knot, t_knot, z_next, t_next)
-  jac_block = zeros(4, 8);
+  jac_block = zeros(2, 6);
   h = t_next - t_knot;
 
   jac_block(1,1) = -1;
   jac_block(1,2) = -h/2;
-  jac_block(1,6) = 1;
-  jac_block(1,7) = -h/2;
+  jac_block(1,4) = 1;
+  jac_block(1,5) = -h/2;
 
   jac_block(2,2) = -1;
   jac_block(2,3) = -h/2;
-  jac_block(2,7) = 1;
-  jac_block(2,8) = -h/2;
+  jac_block(2,5) = 1;
+  jac_block(2,6) = -h/2;
 
-  jac_block(3,3) = -1;
-  jac_block(3,4) = 1;
-
-  jac_block(4,3) = 1;
-  jac_block(4,5) = 1;
 end
 
 function jac_block = get_end_knot_jac(z_knot, t_knot)
-  jac_block = zeros(2, 5);
+  jac_block = [];
 
-  jac_block(1,3) = -1;
-  jac_block(1,4) = 1;
-  
-  jac_block(2,3) = 1;
-  jac_block(2,5) = 1;
 end
 
 if option.eval_jac
@@ -247,9 +213,7 @@ if option.eval_jac
     con_end = con_start + height(jac_block) - 1;
     z_end = z_start + width(jac_block) - 1;
     jacobian(con_start:con_end,z_start:z_end) = jac_block;
-##    if option.sparse
-##      [J_rows, J_cols] =
-##    end
+
     con_start = con_end + 1;
   end
 end
@@ -257,29 +221,27 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Evaluate hessian of lagrangian wrt decision variables  %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-function hes_block = get_first_knot_hes(z_knot, t_knot, t_next)
-  hes_block = zeros(5, 5);
+function hes_block = get_first_knot_hes(z_knot, t_knot, t_next, lb, ub)
+  hes_block = zeros(3, 3);
   h = t_next - t_knot;
+  hes_block(3,3) = (mu/(z_knot(3) - ub(1))^2) + (mu/(lb(1) - z_knot(3))^2);
 
-  hes_block(4,4) = mu/(z_knot(4)^2);
-  hes_block(5,5) = mu/(z_knot(5)^2);
 end
 
-function hes_block = get_middle_knot_hes(z_knot, t_knot, t_next)
-  hes_block = zeros(5, 5);
+function hes_block = get_middle_knot_hes(z_knot, t_knot, t_next, lb, ub)
+  hes_block = zeros(3, 3);
   h = t_next - t_knot;
+  hes_block(3,3) = (mu/(z_knot(3) - ub(1))^2) + (mu/(lb(1) - z_knot(3))^2);
 
-  hes_block(4,4) = mu/(z_knot(4)^2);
-  hes_block(5,5) = mu/(z_knot(5)^2);
 end
 
-function hes_block = get_end_knot_hes(z_knot, t_knot)
-  hes_block = zeros(5, 5);
+function hes_block = get_end_knot_hes(z_knot, t_knot, lb, ub)
+  hes_block = zeros(3, 3);
 
   hes_block(1,1) = 2;
   hes_block(2,2) = 2;
-  hes_block(4,4) = mu/(z_knot(4)^2);
-  hes_block(5,5) = mu/(z_knot(5)^2);
+  hes_block(3,3) = (mu/(z_knot(3) - ub(1))^2) + (mu/(lb(1) - z_knot(3))^2);
+
 end
 
 if option.eval_hes
@@ -290,11 +252,11 @@ if option.eval_hes
     z_knot = O.z(z_start:z_end);
 
     if i == 1
-      hes_block = get_first_knot_hes(z_knot, O.t(i), O.t(i+1));
+      hes_block = get_first_knot_hes(z_knot, O.t(i), O.t(i+1), O.lb, O.ub);
     elseif i == O.N_knots
-      hes_block = get_end_knot_hes(z_knot, O.t(i));
+      hes_block = get_end_knot_hes(z_knot, O.t(i), O.lb, O.ub);
     else
-      hes_block = get_middle_knot_hes(z_knot, O.t(i), O.t(i+1));
+      hes_block = get_middle_knot_hes(z_knot, O.t(i), O.t(i+1), O.lb, O.ub);
     end
 
     hessian(z_start:z_end,z_start:z_end) = hes_block;

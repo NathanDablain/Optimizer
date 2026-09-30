@@ -16,9 +16,9 @@ O = struct(...
   't', [],...
   'knot_size', [],... % derived
   'N_decision_variables', [],... % derived
-  'First_knot_constraints', 6,...
-  'Middle_knot_constraints', 4,...
-  'End_knot_constraints', 2,...
+  'First_knot_constraints', 4,...
+  'Middle_knot_constraints', 2,...
+  'End_knot_constraints', 0,...
   'N_constraints', [],... % derived
   'N_nz', [],...
   'z', [],...
@@ -27,9 +27,7 @@ O = struct(...
 
 % Set the derived quantities
 O.knot_size = O.N_states +...
-              O.N_inputs +...
-              O.N_lb +...
-              O.N_ub;
+              O.N_inputs;
 
 O.N_decision_variables = O.knot_size * O.N_knots;
 
@@ -45,13 +43,6 @@ O.N_nz = 2*(14 + 12*(O.N_knots-2) + 4) + (2 + 2*(O.N_knots-2) + 4);
 
 % Initialize the states and slack variables
 O.z(1:length(O.ic)) = O.ic';
-
-for i = 1:O.N_knots
-  knot_start = O.knot_size*(i-1) + 1;
-  knot_end = O.knot_size*i;
-  O.z(knot_start+3) = O.z(knot_start+2) - O.lb(1);
-  O.z(knot_start+4) = O.ub(1) - O.z(knot_start+2);
-end
 
 option = struct('eval_cost', true, 'eval_grad', true, 'eval_eq', true,...
                 'eval_jac', true, 'eval_hes', true);
@@ -94,14 +85,18 @@ for iterations = 1 : max_iterations
     z_knot = O.z(z_start:z_end);
     z_knot_new = z_new(z_start:z_end);
     delta_z_knot = delta_z(z_start:z_end);
-    if z_knot_new(4) <= 0 && delta_z_knot(4) < 0
-      alpha_check = - z_knot(4) / delta_z_knot(4);
-      alpha = min(alpha, alpha_check);
+
+    s_new = [z_knot_new(3) - O.lb(1);...
+             O.ub(1) - z_knot_new(3)];
+    s_cur = [z_knot(3) - O.lb(1);...
+             O.ub(1) - z_knot(3)];
+    for k = 1:length(s_new)
+      if s_new(k) <= 0
+        alpha_check = - s_cur(k) / (s_new(k) - s_cur(k));
+        alpha = min(alpha, alpha_check);
+      end
     end
-    if z_knot_new(5) <= 0 && delta_z_knot(5) < 0
-      alpha_check = - z_knot(5) / delta_z_knot(5);
-      alpha = min(alpha, alpha_check);
-    end
+
   end
 
   alpha = alpha * tau;
