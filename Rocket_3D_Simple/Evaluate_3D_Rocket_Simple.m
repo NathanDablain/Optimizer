@@ -27,8 +27,8 @@ hessian = [];
 %%                       Evaluate cost                    %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-  mu = 1.0e-6;
-  mu_q = 1.0e-5;
+  mu = 1.0e-2;
+  mu_q = 1.0e1;
   function contribution = get_first_knot_cost(z_knot, lb, ub)
 
     contribution = -mu*(log(z_knot(11) - lb(1)) +...
@@ -45,14 +45,6 @@ hessian = [];
                         log(ub(1) - z_knot(3)) +...
                         log(ub(2) - z_knot(11)) +...
                         log(ub(3) - z_knot(12))) +...
-##                   mu_q*(log(z_knot(5) + 1.0) +...
-##                        log(z_knot(6) + 1.0) +...
-##                        log(z_knot(7) + 1.0) +...
-##                        log(z_knot(8) + 1.0) +...
-##                        log(1.0 - z_knot(5)) +...
-##                        log(1.0 - z_knot(6)) +...
-##                        log(1.0 - z_knot(7)) +...
-##                        log(1.0 - z_knot(8))) +...
                     (mu_q*(norm(z_knot(5:8)) - 1.0))^2;
   end
 
@@ -65,14 +57,6 @@ hessian = [];
                        log(ub(1) - z_knot(3)) +...
                        log(ub(2) - z_knot(11)) +...
                        log(ub(3) - z_knot(12))) +...
-##                   mu_q*(log(z_knot(5) + 1.0) +...
-##                        log(z_knot(6) + 1.0) +...
-##                        log(z_knot(7) + 1.0) +...
-##                        log(z_knot(8) + 1.0) +...
-##                        log(1.0 - z_knot(5)) +...
-##                        log(1.0 - z_knot(6)) +...
-##                        log(1.0 - z_knot(7)) +...
-##                        log(1.0 - z_knot(8))) +...
                     (mu_q*(norm(z_knot(5:8)) - 1.0))^2;
 
   end
@@ -108,15 +92,10 @@ end
 function grad_vec = get_middle_knot_grad(z_knot, lb, ub)
   grad_vec = zeros(length(z_knot), 1);
   grad_vec(3) = -mu/(z_knot(3) - ub(1));
-##  grad_vec(5) = (-mu_q/(z_knot(5) - 1.0)) + (mu_q/(-1.0 - z_knot(5)));
-##  grad_vec(6) = (-mu_q/(z_knot(6) - 1.0)) + (mu_q/(-1.0 - z_knot(6)));
-##  grad_vec(7) = (-mu_q/(z_knot(7) - 1.0)) + (mu_q/(-1.0 - z_knot(7)));
-##  grad_vec(8) = (-mu_q/(z_knot(8) - 1.0)) + (mu_q/(-1.0 - z_knot(8)));
   grad_vec(5) = mu_q*4.0*z_knot(5)*(norm(z_knot(5:8)) - 1);
   grad_vec(6) = mu_q*4.0*z_knot(6)*(norm(z_knot(5:8)) - 1);
   grad_vec(7) = mu_q*4.0*z_knot(7)*(norm(z_knot(5:8)) - 1);
   grad_vec(8) = mu_q*4.0*z_knot(8)*(norm(z_knot(5:8)) - 1);
-
   grad_vec(11) = (-mu/(z_knot(11) - ub(2))) + (mu/(lb(1) - z_knot(11)));
   grad_vec(12) = (-mu/(z_knot(12) - ub(3))) + (mu/(lb(2) - z_knot(12)));
 
@@ -127,15 +106,10 @@ function grad_vec = get_end_knot_grad(z_knot, xd, lb, ub)
   grad_vec(1) = 2.0 * z_knot(1) - 2.0 * xd(1);
   grad_vec(2) = 2.0 * z_knot(2) - 2.0 * xd(2);
   grad_vec(3) = 2.0 * z_knot(3) - 2.0 * xd(3) - mu/(z_knot(3) - ub(1));
-##  grad_vec(5) = (-mu_q/(z_knot(5) - 1.0)) + (mu_q/(-1.0 - z_knot(5)));
-##  grad_vec(6) = (-mu_q/(z_knot(6) - 1.0)) + (mu_q/(-1.0 - z_knot(6)));
-##  grad_vec(7) = (-mu_q/(z_knot(7) - 1.0)) + (mu_q/(-1.0 - z_knot(7)));
-##  grad_vec(8) = (-mu_q/(z_knot(8) - 1.0)) + (mu_q/(-1.0 - z_knot(8)));
   grad_vec(5) = mu_q*4.0*z_knot(5)*(norm(z_knot(5:8)) - 1);
   grad_vec(6) = mu_q*4.0*z_knot(6)*(norm(z_knot(5:8)) - 1);
   grad_vec(7) = mu_q*4.0*z_knot(7)*(norm(z_knot(5:8)) - 1);
   grad_vec(8) = mu_q*4.0*z_knot(8)*(norm(z_knot(5:8)) - 1);
-
   grad_vec(11) = (-mu/(z_knot(11) - ub(2))) + (mu/(lb(1) - z_knot(11)));
   grad_vec(12) = (-mu/(z_knot(12) - ub(3))) + (mu/(lb(2) - z_knot(12)));
 
@@ -334,9 +308,7 @@ function eq_vec = get_middle_knot_eq(z_knot, t_knot, knot_params,...
             z_next(8) - z_knot(8) - 0.5*h*(dx1(8) + dx2(8));...
             % The angular rate constraints
             z_knot(9) - dx1(9);...
-            z_knot(10) - dx1(10)];%...
-            % the unit quaternion constraint
-##            z_knot(5)^2 + z_knot(6)^2 + z_knot(7)^2 + z_knot(8)^2 - 1];
+            z_knot(10) - dx1(10)];
 
 end
 
@@ -346,9 +318,7 @@ function eq_vec = get_end_knot_eq(z_knot, t_knot, knot_params, lb, ub)
   eq_vec = [...
             % The angular rate constraints
             z_knot(9) - dx1(9);...
-            z_knot(10) - dx1(10)];%...
-            % the unit quaternion constraint
-##            z_knot(5)^2 + z_knot(6)^2 + z_knot(7)^2 + z_knot(8)^2 - 1];
+            z_knot(10) - dx1(10)];
 
 end
 
@@ -720,10 +690,6 @@ function jac_block = get_end_knot_jac(z_knot, knot_params)
   jac_block(2,8) = -2*g*q21/s1;
   jac_block(2,10) = 1;
   jac_block(2,11) = -A*s1*rho1/(2*m1);
-##  jac_block(3,5) = 2*q01;
-##  jac_block(3,6) = 2*q11;
-##  jac_block(3,7) = 2*q21;
-##  jac_block(3,8) = 2*q31;
 
 end
 
@@ -793,66 +759,60 @@ function hes_block = get_first_knot_hes(z_knot, t_knot, knot_params, lambda_knot
   lambda9 = lambda_knot(9);
   lambda10 = lambda_knot(10);
 
-  hes_block(3,3) = (mu/(z_knot(3) - ub(1))^2);
+  hes_block(3,3) = A*s1*(-2*Cly1*lambda10 + 2*Clz1*lambda9 + h*lambda4*s1*c_D1)*rho_part_h2/(4*m1) + (mu/(z_knot(3) - ub(1))^2);
+  hes_block(3,4) = A*(-2*Cly1*lambda10 + 2*Clz1*lambda9 + h*lambda4*s1^2*c_D_part_s + 2*h*lambda4*s1*c_D1)*rho_part_h/(4*m1);
+  hes_block(3,11) = -A*lambda10*s1*rho_part_h/(2*m1);
+  hes_block(3,12) = A*lambda9*s1*rho_part_h/(2*m1);
+  hes_block(4,3) = hes_block(3,4);
+  hes_block(4,4) = (A*h*lambda4*s1^3*(s1^2*c_D_part_s2 + 4*s1*c_D_part_s + 2*c_D1)*rho1 + 8*g*m1*(-2*lambda10*q01*q11 - 2*lambda10*q21*q31 - 2*lambda9*q11^2 - 2*lambda9*q21^2 + lambda9))/(4*m1*s1^3);
+  hes_block(4,5) = 2*g*lambda10*q11/s1^2 - h*lambda2*q31 + h*lambda3*q21;
+  hes_block(4,6) = (2*g*lambda10*q01 + 4*g*lambda9*q11 - h*s1^2*(lambda2*q21 + lambda3*q31))/s1^2;
+  hes_block(4,7) = (2*g*lambda10*q31 + 4*g*lambda9*q21 + h*s1^2*(2*lambda1*q21 - lambda2*q11 + lambda3*q01))/s1^2;
+  hes_block(4,8) = (2*g*lambda10*q21 + h*s1^2*(2*lambda1*q31 - lambda2*q01 - lambda3*q11))/s1^2;
+  hes_block(4,11) = -A*lambda10*rho1/(2*m1);
+  hes_block(4,12) = A*lambda9*rho1/(2*m1);
+  hes_block(5,4) = hes_block(4,5);
+  hes_block(5,6) = -2*g*lambda10/s1;
+  hes_block(5,7) = h*(g*lambda4 + lambda3*s1);
+  hes_block(5,8) = -h*lambda2*s1;
+  hes_block(5,9) = -h*lambda7/4;
+  hes_block(5,10) = -h*lambda8/4;
+  hes_block(6,4) = hes_block(4,6);
+  hes_block(6,5) = hes_block(5,6);
+  hes_block(6,6) = -4*g*lambda9/s1;
+  hes_block(6,7) = -h*lambda2*s1;
+  hes_block(6,8) = h*(-g*lambda4 - lambda3*s1);
+  hes_block(6,9) = -h*lambda8/4;
+  hes_block(6,10) = h*lambda7/4;
+  hes_block(7,4) = hes_block(4,7);
+  hes_block(7,5) = hes_block(5,7);
+  hes_block(7,6) = hes_block(6,7);
+  hes_block(7,7) = -4*g*lambda9/s1 + 2*h*lambda1*s1;
+  hes_block(7,8) = -2*g*lambda10/s1;
+  hes_block(7,9) = h*lambda5/4;
+  hes_block(7,10) = -h*lambda6/4;
+  hes_block(8,4) = hes_block(4,8);
+  hes_block(8,5) = hes_block(5,8);
+  hes_block(8,6) = hes_block(6,8);
+  hes_block(8,7) = hes_block(7,8);
+  hes_block(8,8) = 2*h*lambda1*s1;
+  hes_block(8,9) = h*lambda6/4;
+  hes_block(8,10) = h*lambda5/4;
+  hes_block(9,5) = hes_block(5,9);
+  hes_block(9,6) = hes_block(6,9);
+  hes_block(9,7) = hes_block(7,9);
+  hes_block(9,8) = hes_block(8,9);
+  hes_block(10,5) = hes_block(5,10);
+  hes_block(10,6) = hes_block(6,10);
+  hes_block(10,7) = hes_block(7,10);
+  hes_block(10,8) = hes_block(8,10);
+  hes_block(11,3) = hes_block(3,11);
+  hes_block(11,4) = hes_block(4,11);
+  hes_block(12,3) = hes_block(3,12);
+  hes_block(12,4) = hes_block(4,12);
 
   hes_block(11,11) = (mu/(z_knot(11) - ub(2))^2) + (mu/(lb(1) - z_knot(11))^2);
   hes_block(12,12) = (mu/(z_knot(12) - ub(3))^2) + (mu/(lb(2) - z_knot(12))^2);
-
-  if option.full_hes
-    hes_block(3,3) = A*s1*(-2*Cly1*lambda10 + 2*Clz1*lambda9 + h*lambda4*s1*c_D1)*rho_part_h2/(4*m1) + (mu/(z_knot(3) - ub(1))^2);
-    hes_block(3,4) = A*(-2*Cly1*lambda10 + 2*Clz1*lambda9 + h*lambda4*s1^2*c_D_part_s + 2*h*lambda4*s1*c_D1)*rho_part_h/(4*m1);
-    hes_block(3,11) = -A*lambda10*s1*rho_part_h/(2*m1);
-    hes_block(3,12) = A*lambda9*s1*rho_part_h/(2*m1);
-    hes_block(4,3) = hes_block(3,4);
-    hes_block(4,4) = (A*h*lambda4*s1^3*(s1^2*c_D_part_s2 + 4*s1*c_D_part_s + 2*c_D1)*rho1 + 8*g*m1*(-2*lambda10*q01*q11 - 2*lambda10*q21*q31 - 2*lambda9*q11^2 - 2*lambda9*q21^2 + lambda9))/(4*m1*s1^3);
-    hes_block(4,5) = 2*g*lambda10*q11/s1^2 - h*lambda2*q31 + h*lambda3*q21;
-    hes_block(4,6) = (2*g*lambda10*q01 + 4*g*lambda9*q11 - h*s1^2*(lambda2*q21 + lambda3*q31))/s1^2;
-    hes_block(4,7) = (2*g*lambda10*q31 + 4*g*lambda9*q21 + h*s1^2*(2*lambda1*q21 - lambda2*q11 + lambda3*q01))/s1^2;
-    hes_block(4,8) = (2*g*lambda10*q21 + h*s1^2*(2*lambda1*q31 - lambda2*q01 - lambda3*q11))/s1^2;
-    hes_block(4,11) = -A*lambda10*rho1/(2*m1);
-    hes_block(4,12) = A*lambda9*rho1/(2*m1);
-    hes_block(5,4) = hes_block(4,5);
-    hes_block(5,6) = -2*g*lambda10/s1;
-    hes_block(5,7) = h*(g*lambda4 + lambda3*s1);
-    hes_block(5,8) = -h*lambda2*s1;
-    hes_block(5,9) = -h*lambda7/4;
-    hes_block(5,10) = -h*lambda8/4;
-    hes_block(6,4) = hes_block(4,6);
-    hes_block(6,5) = hes_block(5,6);
-    hes_block(6,6) = -4*g*lambda9/s1;
-    hes_block(6,7) = -h*lambda2*s1;
-    hes_block(6,8) = h*(-g*lambda4 - lambda3*s1);
-    hes_block(6,9) = -h*lambda8/4;
-    hes_block(6,10) = h*lambda7/4;
-    hes_block(7,4) = hes_block(4,7);
-    hes_block(7,5) = hes_block(5,7);
-    hes_block(7,6) = hes_block(6,7);
-    hes_block(7,7) = -4*g*lambda9/s1 + 2*h*lambda1*s1;
-    hes_block(7,8) = -2*g*lambda10/s1;
-    hes_block(7,9) = h*lambda5/4;
-    hes_block(7,10) = -h*lambda6/4;
-    hes_block(8,4) = hes_block(4,8);
-    hes_block(8,5) = hes_block(5,8);
-    hes_block(8,6) = hes_block(6,8);
-    hes_block(8,7) = hes_block(7,8);
-    hes_block(8,8) = 2*h*lambda1*s1;
-    hes_block(8,9) = h*lambda6/4;
-    hes_block(8,10) = h*lambda5/4;
-    hes_block(9,5) = hes_block(5,9);
-    hes_block(9,6) = hes_block(6,9);
-    hes_block(9,7) = hes_block(7,9);
-    hes_block(9,8) = hes_block(8,9);
-    hes_block(10,5) = hes_block(5,10);
-    hes_block(10,6) = hes_block(6,10);
-    hes_block(10,7) = hes_block(7,10);
-    hes_block(10,8) = hes_block(8,10);
-    hes_block(11,3) = hes_block(3,11);
-    hes_block(11,4) = hes_block(4,11);
-    hes_block(12,3) = hes_block(3,12);
-    hes_block(12,4) = hes_block(4,12);
-  end
-
-
 end
 
 function hes_block = get_middle_knot_hes(z_knot, t_knot, knot_params, lambda_knot, t_next, lambda_last, lb, ub)
@@ -890,77 +850,60 @@ function hes_block = get_middle_knot_hes(z_knot, t_knot, knot_params, lambda_kno
   lambda9 = lambda_knot(9);
   lambda10 = lambda_knot(10);
 
-  hes_block(3,3) = (mu/(z_knot(3) - ub(1))^2);
-
-  hes_block(5,5) = (mu_q/(z_knot(5) - 1.0)^2) + (mu_q/(-1.0 - z_knot(5))^2);
-
-  hes_block(6,6) = (mu_q/(z_knot(6) - 1.0)^2) + (mu_q/(-1.0 - z_knot(6))^2);
-
-  hes_block(7,7) = (mu_q/(z_knot(7) - 1.0)^2) + (mu_q/(-1.0 - z_knot(7))^2);
-
-  hes_block(8,8) = (mu_q/(z_knot(8) - 1.0)^2) + (mu_q/(-1.0 - z_knot(8))^2);
-
+  hes_block(3,3) = A*s1*(-2*Cly1*lambda10 + 2*Clz1*lambda9 + h*lambda4*s1*c_D1)*rho_part_h2/(4*m1) + (mu/(z_knot(3) - ub(1))^2);
+  hes_block(3,4) = A*(-2*Cly1*lambda10 + 2*Clz1*lambda9 + h*lambda4*s1^2*c_D_part_s + 2*h*lambda4*s1*c_D1)*rho_part_h/(4*m1);
+  hes_block(3,11) = -A*lambda10*s1*rho_part_h/(2*m1);
+  hes_block(3,12) = A*lambda9*s1*rho_part_h/(2*m1);
+  hes_block(4,3) = hes_block(3,4);
+  hes_block(4,4) = (A*h*lambda4*s1^3*(s1^2*c_D_part_s2 + 4*s1*c_D_part_s + 2*c_D1)*rho1 + 8*g*m1*(-2*lambda10*q01*q11 - 2*lambda10*q21*q31 - 2*lambda9*q11^2 - 2*lambda9*q21^2 + lambda9))/(4*m1*s1^3);
+  hes_block(4,5) = 2*g*lambda10*q11/s1^2 - h*lambda2*q31 + h*lambda3*q21;
+  hes_block(4,6) = (2*g*lambda10*q01 + 4*g*lambda9*q11 - h*s1^2*(lambda2*q21 + lambda3*q31))/s1^2;
+  hes_block(4,7) = (2*g*lambda10*q31 + 4*g*lambda9*q21 + h*s1^2*(2*lambda1*q21 - lambda2*q11 + lambda3*q01))/s1^2;
+  hes_block(4,8) = (2*g*lambda10*q21 + h*s1^2*(2*lambda1*q31 - lambda2*q01 - lambda3*q11))/s1^2;
+  hes_block(4,11) = -A*lambda10*rho1/(2*m1);
+  hes_block(4,12) = A*lambda9*rho1/(2*m1);
+  hes_block(5,4) = hes_block(4,5);
+  hes_block(5,5) = 2.0*mu_q;
+  hes_block(5,6) = -2*g*lambda10/s1;
+  hes_block(5,7) = h*(g*lambda4 + lambda3*s1);
+  hes_block(5,8) = -h*lambda2*s1;
+  hes_block(5,9) = -h*lambda7/4;
+  hes_block(5,10) = -h*lambda8/4;
+  hes_block(6,4) = hes_block(4,6);
+  hes_block(6,5) = hes_block(5,6);
+  hes_block(6,6) = -4*g*lambda9/s1 + 2.0*mu_q;
+  hes_block(6,7) = -h*lambda2*s1;
+  hes_block(6,8) = h*(-g*lambda4 - lambda3*s1);
+  hes_block(6,9) = -h*lambda8/4;
+  hes_block(6,10) = h*lambda7/4;
+  hes_block(7,4) = hes_block(4,7);
+  hes_block(7,5) = hes_block(5,7);
+  hes_block(7,6) = hes_block(6,7);
+  hes_block(7,7) = 2*(-2*g*lambda9 + s1*(h*lambda1*s1))/s1 + 2.0*mu_q;
+  hes_block(7,8) = -2*g*lambda10/s1;
+  hes_block(7,9) = h*lambda5/4;
+  hes_block(7,10) = -h*lambda6/4;
+  hes_block(8,4) = hes_block(4,8);
+  hes_block(8,5) = hes_block(5,8);
+  hes_block(8,6) = hes_block(6,8);
+  hes_block(8,7) = hes_block(7,8);
+  hes_block(8,8) = 2*h*lambda1*s1 + 2.0*mu_q;
+  hes_block(8,9) = h*lambda6/4;
+  hes_block(8,10) = h*lambda5/4;
+  hes_block(9,5) = hes_block(5,9);
+  hes_block(9,6) = hes_block(6,9);
+  hes_block(9,7) = hes_block(7,9);
+  hes_block(9,8) = hes_block(8,9);
+  hes_block(10,5) = hes_block(5,10);
+  hes_block(10,6) = hes_block(6,10);
+  hes_block(10,7) = hes_block(7,10);
+  hes_block(10,8) = hes_block(8,10);
+  hes_block(11,3) = hes_block(3,11);
+  hes_block(11,4) = hes_block(4,11);
+  hes_block(12,3) = hes_block(3,12);
+  hes_block(12,4) = hes_block(4,12);
   hes_block(11,11) = (mu/(z_knot(11) - ub(2))^2) + (mu/(lb(1) - z_knot(11))^2);
   hes_block(12,12) = (mu/(z_knot(12) - ub(3))^2) + (mu/(lb(2) - z_knot(12))^2);
-
-  if option.full_hes
-    hes_block(3,3) = A*s1*(-2*Cly1*lambda10 + 2*Clz1*lambda9 + h*lambda4*s1*c_D1)*rho_part_h2/(4*m1) + (mu/(z_knot(3) - ub(1))^2);
-    hes_block(3,4) = A*(-2*Cly1*lambda10 + 2*Clz1*lambda9 + h*lambda4*s1^2*c_D_part_s + 2*h*lambda4*s1*c_D1)*rho_part_h/(4*m1);
-    hes_block(3,11) = -A*lambda10*s1*rho_part_h/(2*m1);
-    hes_block(3,12) = A*lambda9*s1*rho_part_h/(2*m1);
-    hes_block(4,3) = hes_block(3,4);
-    hes_block(4,4) = (A*h*lambda4*s1^3*(s1^2*c_D_part_s2 + 4*s1*c_D_part_s + 2*c_D1)*rho1 + 8*g*m1*(-2*lambda10*q01*q11 - 2*lambda10*q21*q31 - 2*lambda9*q11^2 - 2*lambda9*q21^2 + lambda9))/(4*m1*s1^3);
-    hes_block(4,5) = 2*g*lambda10*q11/s1^2 - h*lambda2*q31 + h*lambda3*q21;
-    hes_block(4,6) = (2*g*lambda10*q01 + 4*g*lambda9*q11 - h*s1^2*(lambda2*q21 + lambda3*q31))/s1^2;
-    hes_block(4,7) = (2*g*lambda10*q31 + 4*g*lambda9*q21 + h*s1^2*(2*lambda1*q21 - lambda2*q11 + lambda3*q01))/s1^2;
-    hes_block(4,8) = (2*g*lambda10*q21 + h*s1^2*(2*lambda1*q31 - lambda2*q01 - lambda3*q11))/s1^2;
-    hes_block(4,11) = -A*lambda10*rho1/(2*m1);
-    hes_block(4,12) = A*lambda9*rho1/(2*m1);
-    hes_block(5,4) = hes_block(4,5);
-##    hes_block(5,5) = (mu_q/(z_knot(5) - 1.0)^2) + (mu_q/(-1.0 - z_knot(5))^2);
-    hes_block(5,6) = -2*g*lambda10/s1;
-    hes_block(5,7) = h*(g*lambda4 + lambda3*s1);
-    hes_block(5,8) = -h*lambda2*s1;
-    hes_block(5,9) = -h*lambda7/4;
-    hes_block(5,10) = -h*lambda8/4;
-    hes_block(6,4) = hes_block(4,6);
-    hes_block(6,5) = hes_block(5,6);
-##    hes_block(6,6) = (mu_q/(z_knot(6) - 1.0)^2) + (mu_q/(-1.0 - z_knot(6))^2) + -4*g*lambda9/s1;
-    hes_block(6,6) = -4*g*lambda9/s1;
-    hes_block(6,7) = -h*lambda2*s1;
-    hes_block(6,8) = h*(-g*lambda4 - lambda3*s1);
-    hes_block(6,9) = -h*lambda8/4;
-    hes_block(6,10) = h*lambda7/4;
-    hes_block(7,4) = hes_block(4,7);
-    hes_block(7,5) = hes_block(5,7);
-    hes_block(7,6) = hes_block(6,7);
-##    hes_block(7,7) = (mu_q/(z_knot(7) - 1.0)^2) + (mu_q/(-1.0 - z_knot(7))^2) + 2*(-2*g*lambda9 + s1*(h*lambda1*s1))/s1;
-    hes_block(7,7) = 2*(-2*g*lambda9 + s1*(h*lambda1*s1))/s1;
-    hes_block(7,8) = -2*g*lambda10/s1;
-    hes_block(7,9) = h*lambda5/4;
-    hes_block(7,10) = -h*lambda6/4;
-    hes_block(8,4) = hes_block(4,8);
-    hes_block(8,5) = hes_block(5,8);
-    hes_block(8,6) = hes_block(6,8);
-    hes_block(8,7) = hes_block(7,8);
-##    hes_block(8,8) = (mu_q/(z_knot(8) - 1.0)^2) + (mu_q/(-1.0 - z_knot(8))^2) + 2*h*lambda1*s1;
-    hes_block(8,8) = 2*h*lambda1*s1;
-    hes_block(8,9) = h*lambda6/4;
-    hes_block(8,10) = h*lambda5/4;
-    hes_block(9,5) = hes_block(5,9);
-    hes_block(9,6) = hes_block(6,9);
-    hes_block(9,7) = hes_block(7,9);
-    hes_block(9,8) = hes_block(8,9);
-    hes_block(10,5) = hes_block(5,10);
-    hes_block(10,6) = hes_block(6,10);
-    hes_block(10,7) = hes_block(7,10);
-    hes_block(10,8) = hes_block(8,10);
-    hes_block(11,3) = hes_block(3,11);
-    hes_block(11,4) = hes_block(4,11);
-    hes_block(12,3) = hes_block(3,12);
-    hes_block(12,4) = hes_block(4,12);
-  end
-
 end
 
 function hes_block = get_end_knot_hes(z_knot, t_knot, knot_params, lambda_knot, t_next, lambda_last, lb, ub)
@@ -1002,77 +945,60 @@ function hes_block = get_end_knot_hes(z_knot, t_knot, knot_params, lambda_knot, 
 
   hes_block(2,2) = 2;
 
-  hes_block(3,3) = 2 + (mu/(z_knot(3) - ub(1))^2);
-
-  hes_block(5,5) = (mu_q/(z_knot(5) - 1.0)^2) + (mu_q/(-1.0 - z_knot(5))^2);
-
-  hes_block(6,6) = (mu_q/(z_knot(6) - 1.0)^2) + (mu_q/(-1.0 - z_knot(6))^2);
-
-  hes_block(7,7) = (mu_q/(z_knot(7) - 1.0)^2) + (mu_q/(-1.0 - z_knot(7))^2);
-
-  hes_block(8,8) = (mu_q/(z_knot(8) - 1.0)^2) + (mu_q/(-1.0 - z_knot(8))^2);
-
+  hes_block(3,3) = 2 + (mu/(z_knot(3) - ub(1))^2) + (A*s1*(-2*Cly1*lambda10 + 2*Clz1*lambda9 + h*lambda4*s1*c_D1)*rho_part_h2/(4*m1));
+  hes_block(3,4) = A*(-2*Cly1*lambda10 + 2*Clz1*lambda9 + h*lambda4*s1^2*c_D_part_s + 2*h*lambda4*s1*c_D1)*rho_part_h/(4*m1);
+  hes_block(3,11) = -A*lambda10*s1*rho_part_h/(2*m1);
+  hes_block(3,12) = A*lambda9*s1*rho_part_h/(2*m1);
+  hes_block(4,3) = hes_block(3,4);
+  hes_block(4,4) = (A*h*lambda4*s1^3*(s1^2*c_D_part_s2 + 4*s1*c_D_part_s + 2*c_D1)*rho1 + 8*g*m1*(-2*lambda10*q01*q11 - 2*lambda10*q21*q31 - 2*lambda9*q11^2 - 2*lambda9*q21^2 + lambda9))/(4*m1*s1^3);
+  hes_block(4,5) = 2*g*lambda10*q11/s1^2 - h*lambda2*q31 + h*lambda3*q21;
+  hes_block(4,6) = (2*g*lambda10*q01 + 4*g*lambda9*q11 - h*s1^2*(lambda2*q21 + lambda3*q31))/s1^2;
+  hes_block(4,7) = (2*g*lambda10*q31 + 4*g*lambda9*q21 + h*s1^2*(2*lambda1*q21 - lambda2*q11 + lambda3*q01))/s1^2;
+  hes_block(4,8) = (2*g*lambda10*q21 + h*s1^2*(2*lambda1*q31 - lambda2*q01 - lambda3*q11))/s1^2;
+  hes_block(4,11) = -A*lambda10*rho1/(2*m1);
+  hes_block(4,12) = A*lambda9*rho1/(2*m1);
+  hes_block(5,4) = hes_block(4,5);
+  hes_block(5,5) = 2.0*mu_q;
+  hes_block(5,6) = -2*g*lambda10/s1;
+  hes_block(5,7) = h*(g*lambda4 + lambda3*s1);
+  hes_block(5,8) = -h*lambda2*s1;
+  hes_block(5,9) = -h*lambda7/4;
+  hes_block(5,10) = -h*lambda8/4;
+  hes_block(6,4) = hes_block(4,6);
+  hes_block(6,5) = hes_block(5,6);
+  hes_block(6,6) = -4*g*lambda9/s1 + 2.0*mu_q;
+  hes_block(6,7) = -h*lambda2*s1;
+  hes_block(6,8) = h*(-g*lambda4 - lambda3*s1);
+  hes_block(6,9) = -h*lambda8/4;
+  hes_block(6,10) = h*lambda7/4;
+  hes_block(7,4) = hes_block(4,7);
+  hes_block(7,5) = hes_block(5,7);
+  hes_block(7,6) = hes_block(6,7);
+  hes_block(7,7) = 2*(-2*g*lambda9 + s1*(h*lambda1*s1))/s1 + 2.0*mu_q;
+  hes_block(7,8) = -2*g*lambda10/s1;
+  hes_block(7,9) = h*lambda5/4;
+  hes_block(7,10) = -h*lambda6/4;
+  hes_block(8,4) = hes_block(4,8);
+  hes_block(8,5) = hes_block(5,8);
+  hes_block(8,6) = hes_block(6,8);
+  hes_block(8,7) = hes_block(7,8);
+  hes_block(8,8) = 2*h*lambda1*s1 + 2.0*mu_q;
+  hes_block(8,9) = h*lambda6/4;
+  hes_block(8,10) = h*lambda5/4;
+  hes_block(9,5) = hes_block(5,9);
+  hes_block(9,6) = hes_block(6,9);
+  hes_block(9,7) = hes_block(7,9);
+  hes_block(9,8) = hes_block(8,9);
+  hes_block(10,5) = hes_block(5,10);
+  hes_block(10,6) = hes_block(6,10);
+  hes_block(10,7) = hes_block(7,10);
+  hes_block(10,8) = hes_block(8,10);
+  hes_block(11,3) = hes_block(3,11);
+  hes_block(11,4) = hes_block(4,11);
+  hes_block(12,3) = hes_block(3,12);
+  hes_block(12,4) = hes_block(4,12);
   hes_block(11,11) = (mu/(z_knot(11) - ub(2))^2) + (mu/(lb(1) - z_knot(11))^2);
   hes_block(12,12) = (mu/(z_knot(12) - ub(3))^2) + (mu/(lb(2) - z_knot(12))^2);
-
-  if option.full_hes
-    hes_block(3,3) = 2 + (mu/(z_knot(3) - ub(1))^2) + (A*s1*(-2*Cly1*lambda10 + 2*Clz1*lambda9 + h*lambda4*s1*c_D1)*rho_part_h2/(4*m1));
-    hes_block(3,4) = A*(-2*Cly1*lambda10 + 2*Clz1*lambda9 + h*lambda4*s1^2*c_D_part_s + 2*h*lambda4*s1*c_D1)*rho_part_h/(4*m1);
-    hes_block(3,11) = -A*lambda10*s1*rho_part_h/(2*m1);
-    hes_block(3,12) = A*lambda9*s1*rho_part_h/(2*m1);
-    hes_block(4,3) = hes_block(3,4);
-    hes_block(4,4) = (A*h*lambda4*s1^3*(s1^2*c_D_part_s2 + 4*s1*c_D_part_s + 2*c_D1)*rho1 + 8*g*m1*(-2*lambda10*q01*q11 - 2*lambda10*q21*q31 - 2*lambda9*q11^2 - 2*lambda9*q21^2 + lambda9))/(4*m1*s1^3);
-    hes_block(4,5) = 2*g*lambda10*q11/s1^2 - h*lambda2*q31 + h*lambda3*q21;
-    hes_block(4,6) = (2*g*lambda10*q01 + 4*g*lambda9*q11 - h*s1^2*(lambda2*q21 + lambda3*q31))/s1^2;
-    hes_block(4,7) = (2*g*lambda10*q31 + 4*g*lambda9*q21 + h*s1^2*(2*lambda1*q21 - lambda2*q11 + lambda3*q01))/s1^2;
-    hes_block(4,8) = (2*g*lambda10*q21 + h*s1^2*(2*lambda1*q31 - lambda2*q01 - lambda3*q11))/s1^2;
-    hes_block(4,11) = -A*lambda10*rho1/(2*m1);
-    hes_block(4,12) = A*lambda9*rho1/(2*m1);
-    hes_block(5,4) = hes_block(4,5);
-##    hes_block(5,5) = (mu_q/(z_knot(5) - 1.0)^2) + (mu_q/(-1.0 - z_knot(5))^2);
-    hes_block(5,6) = -2*g*lambda10/s1;
-    hes_block(5,7) = h*(g*lambda4 + lambda3*s1);
-    hes_block(5,8) = -h*lambda2*s1;
-    hes_block(5,9) = -h*lambda7/4;
-    hes_block(5,10) = -h*lambda8/4;
-    hes_block(6,4) = hes_block(4,6);
-    hes_block(6,5) = hes_block(5,6);
-##    hes_block(6,6) = (mu_q/(z_knot(6) - 1.0)^2) + (mu_q/(-1.0 - z_knot(6))^2) + -4*g*lambda9/s1;
-    hes_block(6,6) = -4*g*lambda9/s1;
-    hes_block(6,7) = -h*lambda2*s1;
-    hes_block(6,8) = h*(-g*lambda4 - lambda3*s1);
-    hes_block(6,9) = -h*lambda8/4;
-    hes_block(6,10) = h*lambda7/4;
-    hes_block(7,4) = hes_block(4,7);
-    hes_block(7,5) = hes_block(5,7);
-    hes_block(7,6) = hes_block(6,7);
-##    hes_block(7,7) = (mu_q/(z_knot(7) - 1.0)^2) + (mu_q/(-1.0 - z_knot(7))^2) + 2*(-2*g*lambda9 + s1*(h*lambda1*s1))/s1;
-    hes_block(7,7) = 2*(-2*g*lambda9 + s1*(h*lambda1*s1))/s1;
-    hes_block(7,8) = -2*g*lambda10/s1;
-    hes_block(7,9) = h*lambda5/4;
-    hes_block(7,10) = -h*lambda6/4;
-    hes_block(8,4) = hes_block(4,8);
-    hes_block(8,5) = hes_block(5,8);
-    hes_block(8,6) = hes_block(6,8);
-    hes_block(8,7) = hes_block(7,8);
-##    hes_block(8,8) = (mu_q/(z_knot(8) - 1.0)^2) + (mu_q/(-1.0 - z_knot(8))^2) + 2*h*lambda1*s1;
-    hes_block(8,8) = 2*h*lambda1*s1;
-    hes_block(8,9) = h*lambda6/4;
-    hes_block(8,10) = h*lambda5/4;
-    hes_block(9,5) = hes_block(5,9);
-    hes_block(9,6) = hes_block(6,9);
-    hes_block(9,7) = hes_block(7,9);
-    hes_block(9,8) = hes_block(8,9);
-    hes_block(10,5) = hes_block(5,10);
-    hes_block(10,6) = hes_block(6,10);
-    hes_block(10,7) = hes_block(7,10);
-    hes_block(10,8) = hes_block(8,10);
-    hes_block(11,3) = hes_block(3,11);
-    hes_block(11,4) = hes_block(4,11);
-    hes_block(12,3) = hes_block(3,12);
-    hes_block(12,4) = hes_block(4,12);
-  end
-
 end
 
 if option.eval_hes

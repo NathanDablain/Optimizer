@@ -65,9 +65,6 @@ void Initial_Problem_Data(){
     // Set initial conditions
     Load_ic(z);
 
-    // Set slack variables
-    Load_slack(z);
-
 }
 
 void Initial_Solve(){
@@ -252,7 +249,7 @@ double Primary_Feasability_Check(){
     max_eq = 0.0;
     for (i = 0; i < N_CONSTRAINTS; i++){
         eq[i] = -b[N_DECISION_VARIABLES+i];
-        if (eq[i] > max_eq)
+        if (fabs(eq[i]) > max_eq)
             max_eq = eq[i];
     }
 

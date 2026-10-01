@@ -33,16 +33,6 @@ void Load_ic(double *z){
     z[1] = ic[1];
 }
 
-void Load_slack(double *z){
-    int i, j;
-
-    for (i = 0; i < N_KNOTS; i++){
-        j = KNOT_SIZE*i;
-        z[j+3] = z[j+2] - lb;
-        z[j+4] = ub - z[j+2];
-    }
-}
-
 void Load_Problem_Data(double **A, double *b, double *z, double *h, bool sparse){
     // Update and load the gradient of the cost function wrt the decision variables
     Load_Gradient(b, z);
@@ -60,17 +50,22 @@ void Load_Problem_Data(double **A, double *b, double *z, double *h, bool sparse)
 }
 
 double First_Knot_Cost(double *z_knot){
-    double contribution = -mu*(log(z_knot[3]) + log(z_knot[4]));
+    double contribution = -mu*(log(z_knot[2] - lb) +
+                               log(ub - z_knot[2]));
     return contribution;
 }
 
 double Middle_Knot_Cost(double *z_knot){
-    double contribution = -mu*(log(z_knot[3]) + log(z_knot[4]));
+    double contribution = -mu*(log(z_knot[2] - lb) +
+                               log(ub - z_knot[2]));
     return contribution;
 }
 
 double End_Knot_Cost(double *z_knot){
-    double contribution = pow(z_knot[0] - xd[0], 2) + pow(z_knot[1] - xd[1], 2) - mu*(log(z_knot[3]) + log(z_knot[4]));
+    double contribution = pow(z_knot[0] - xd[0], 2) +
+                          pow(z_knot[1] - xd[1], 2) -
+                          mu*(log(z_knot[2] - lb) +
+                              log(ub - z_knot[2]));
     return contribution;
 }
 
@@ -94,25 +89,28 @@ double Get_Cost(double *z){
 
 double Select_Alpha(double *z, double *delta_z){
     double z_new[N_DECISION_VARIABLES];
+    double slack_new[N_LBS + N_UBS];
+    double slack_cur[N_LBS + N_UBS];
     double alpha_check;
     double alpha = 1.0;
     const double tau = 0.995;
-    int i, offset_z;
-    // First check the maximum alpha that will keep our slack variables positive
+    int i, j, offset_z;
+    // First check the maximum alpha that will maintain positive slack
     for (i = 0; i < N_DECISION_VARIABLES; i++)
         z_new[i] = z[i] + delta_z[i];
 
     for (i = 0; i < N_KNOTS; i++){
         offset_z = i*KNOT_SIZE;
-        if (z_new[offset_z+3] <= 0.0 && delta_z[offset_z+3] < 0.0){
-            alpha_check = - z[offset_z+3] / delta_z[offset_z+3];
-            if (alpha_check < alpha)
-                alpha = alpha_check;
-        }
-        if (z_new[offset_z+4] <= 0.0 && delta_z[offset_z+4] < 0.0){
-            alpha_check = - z[offset_z+4] / delta_z[offset_z+4];
-            if (alpha_check < alpha)
-                alpha = alpha_check;
+        slack_new[0] = z_new[offset_z+2] - lb;
+        slack_new[1] = ub - z_new[offset_z+2];
+        slack_cur[0] = z[offset_z+2] - lb;
+        slack_cur[1] = ub - z[offset_z+2];
+        for (j = 0; j < N_LBS + N_UBS; j++){
+            if (slack_new[j] <= 0.0) {
+                alpha_check = -slack_cur[j] / (slack_new[j] - slack_cur[j]);
+                if (alpha_check < alpha)
+                    alpha = alpha_check;
+            }
         }
 
     }
@@ -124,7 +122,6 @@ double Select_Alpha(double *z, double *delta_z){
     double amid1, amid2, cost1, cost2;
     double zmid1[N_DECISION_VARIABLES];
     double zmid2[N_DECISION_VARIABLES];
-    int j;
     const int max_ternary = 12;
     for (i = 0; i < max_ternary; i++){
         amid1 = alow + (1.0/3.0)*(ahigh - alow);
@@ -162,8 +159,8 @@ void First_Knot_Jacobian(double **A, double *h, int knot, int offset_z, int offs
         A[j][problem.k1[3]] = c1;
         A[k][problem.k1[4]] = A[j][problem.k1[0]];
         A[k+1][problem.k1[5]] = A[j][problem.k1[1]];
-        A[k+5][problem.k1[6]] = A[j][problem.k1[2]];
-        A[k+6][problem.k1[7]] = A[j][problem.k1[3]];
+        A[k+3][problem.k1[6]] = A[j][problem.k1[2]];
+        A[k+4][problem.k1[7]] = A[j][problem.k1[3]];
 
         A[j+1][problem.k1[8]] = -1.0;
         A[j+1][problem.k1[9]] = c1;
@@ -171,59 +168,39 @@ void First_Knot_Jacobian(double **A, double *h, int knot, int offset_z, int offs
         A[j+1][problem.k1[11]] = c1;
         A[k+1][problem.k1[12]] = A[j+1][problem.k1[8]];
         A[k+2][problem.k1[13]] = A[j+1][problem.k1[9]];
-        A[k+6][problem.k1[14]] = A[j+1][problem.k1[10]];
-        A[k+7][problem.k1[15]] = A[j+1][problem.k1[11]];
+        A[k+4][problem.k1[14]] = A[j+1][problem.k1[10]];
+        A[k+5][problem.k1[15]] = A[j+1][problem.k1[11]];
 
         A[j+2][problem.k1[16]] = -1.0;
-        A[j+2][problem.k1[17]] = 1.0;
-        A[k+2][problem.k1[18]] = A[j+2][problem.k1[16]];
-        A[k+3][problem.k1[19]] = A[j+2][problem.k1[17]];
+        A[k][problem.k1[17]] = A[j+2][problem.k1[16]];
 
-        A[j+3][problem.k1[20]] = 1.0;
-        A[j+3][problem.k1[21]] = 1.0;
-        A[k+2][problem.k1[22]] = A[j+3][problem.k1[20]];
-        A[k+4][problem.k1[23]] = A[j+3][problem.k1[21]];
-
-        A[j+4][problem.k1[24]] = -1.0;
-        A[k][problem.k1[25]] = A[j+4][problem.k1[24]];
-
-        A[j+5][problem.k1[26]] = -1.0;
-        A[k+1][problem.k1[27]] = A[j+5][problem.k1[26]];
+        A[j+3][problem.k1[18]] = -1.0;
+        A[k+1][problem.k1[19]] = A[j+3][problem.k1[18]];
     }
     else{
         A[j][k] = -1.0;
         A[j][k+1] = c1;
-        A[j][k+5] = 1.0;
-        A[j][k+6] = c1;
+        A[j][k+3] = 1.0;
+        A[j][k+4] = c1;
         A[k][j] = A[j][k];
         A[k+1][j] = A[j][k+1];
-        A[k+5][j] = A[j][k+5];
-        A[k+6][j] = A[j][k+6];
+        A[k+3][j] = A[j][k+3];
+        A[k+4][j] = A[j][k+4];
 
         A[j+1][k+1] = -1.0;
         A[j+1][k+2] = c1;
-        A[j+1][k+6] = 1.0;
-        A[j+1][k+7] = c1;
+        A[j+1][k+4] = 1.0;
+        A[j+1][k+5] = c1;
         A[k+1][j+1] = A[j+1][k+1];
         A[k+2][j+1] = A[j+1][k+2];
-        A[k+6][j+1] = A[j+1][k+6];
-        A[k+7][j+1] = A[j+1][k+7];
+        A[k+4][j+1] = A[j+1][k+4];
+        A[k+5][j+1] = A[j+1][k+5];
 
-        A[j+2][k+2] = -1.0;
-        A[j+2][k+3] = 1.0;
-        A[k+2][j+2] = A[j+2][k+2];
-        A[k+3][j+2] = A[j+2][k+3];
+        A[j+2][k] = -1.0;
+        A[k][j+2] = A[j+2][k];
 
-        A[j+3][k+2] = 1.0;
-        A[j+3][k+4] = 1.0;
-        A[k+2][j+3] = A[j+3][k+2];
-        A[k+4][j+3] = A[j+3][k+4];
-
-        A[j+4][k] = -1.0;
-        A[k][j+4] = A[j+4][k];
-
-        A[j+5][k+1] = -1.0;
-        A[k+1][j+5] = A[j+5][k+1];
+        A[j+3][k+1] = -1.0;
+        A[k+1][j+3] = A[j+3][k+1];
     }
 }
 
@@ -240,8 +217,8 @@ void Middle_Knot_Jacobian(double **A, double *h, int knot, int offset_z, int off
         A[j][problem.km[knot-1][3]] = c1;
         A[k][problem.km[knot-1][4]] = A[j][problem.km[knot-1][0]];
         A[k+1][problem.km[knot-1][5]] = A[j][problem.km[knot-1][1]];
-        A[k+5][problem.km[knot-1][6]] = A[j][problem.km[knot-1][2]];
-        A[k+6][problem.km[knot-1][7]] = A[j][problem.km[knot-1][3]];
+        A[k+3][problem.km[knot-1][6]] = A[j][problem.km[knot-1][2]];
+        A[k+4][problem.km[knot-1][7]] = A[j][problem.km[knot-1][3]];
 
         A[j+1][problem.km[knot-1][8]] = -1.0;
         A[j+1][problem.km[knot-1][9]] = c1;
@@ -249,77 +226,34 @@ void Middle_Knot_Jacobian(double **A, double *h, int knot, int offset_z, int off
         A[j+1][problem.km[knot-1][11]] = c1;
         A[k+1][problem.km[knot-1][12]] = A[j+1][problem.km[knot-1][8]];
         A[k+2][problem.km[knot-1][13]] = A[j+1][problem.km[knot-1][9]];
-        A[k+6][problem.km[knot-1][14]] = A[j+1][problem.km[knot-1][10]];
-        A[k+7][problem.km[knot-1][15]] = A[j+1][problem.km[knot-1][11]];
+        A[k+4][problem.km[knot-1][14]] = A[j+1][problem.km[knot-1][10]];
+        A[k+5][problem.km[knot-1][15]] = A[j+1][problem.km[knot-1][11]];
 
-        A[j+2][problem.km[knot-1][16]] = -1.0;
-        A[j+2][problem.km[knot-1][17]] = 1.0;
-        A[k+2][problem.km[knot-1][18]] = A[j+2][problem.km[knot-1][16]];
-        A[k+3][problem.km[knot-1][19]] = A[j+2][problem.km[knot-1][17]];
-
-        A[j+3][problem.km[knot-1][20]] = 1.0;
-        A[j+3][problem.km[knot-1][21]] = 1.0;
-        A[k+2][problem.km[knot-1][22]] = A[j+3][problem.km[knot-1][20]];
-        A[k+4][problem.km[knot-1][23]] = A[j+3][problem.km[knot-1][21]];
     }
     else{
         A[j][k] = -1.0;
         A[j][k+1] = c1;
-        A[j][k+5] = 1.0;
-        A[j][k+6] = c1;
+        A[j][k+3] = 1.0;
+        A[j][k+4] = c1;
         A[k][j] = A[j][k];
         A[k+1][j] = A[j][k+1];
-        A[k+5][j] = A[j][k+5];
-        A[k+6][j] = A[j][k+6];
+        A[k+3][j] = A[j][k+3];
+        A[k+4][j] = A[j][k+4];
 
         A[j+1][k+1] = -1.0;
         A[j+1][k+2] = c1;
-        A[j+1][k+6] = 1.0;
-        A[j+1][k+7] = c1;
+        A[j+1][k+4] = 1.0;
+        A[j+1][k+5] = c1;
         A[k+1][j+1] = A[j+1][k+1];
         A[k+2][j+1] = A[j+1][k+2];
-        A[k+6][j+1] = A[j+1][k+6];
-        A[k+7][j+1] = A[j+1][k+7];
+        A[k+4][j+1] = A[j+1][k+4];
+        A[k+5][j+1] = A[j+1][k+5];
 
-        A[j+2][k+2] = -1.0;
-        A[j+2][k+3] = 1.0;
-        A[k+2][j+2] = A[j+2][k+2];
-        A[k+3][j+2] = A[j+2][k+3];
-
-        A[j+3][k+2] = 1.0;
-        A[j+3][k+4] = 1.0;
-        A[k+2][j+3] = A[j+3][k+2];
-        A[k+4][j+3] = A[j+3][k+4];
     }
 }
 
 void End_Knot_Jacobian(double **A, int knot, int offset_z, int offset_c, bool sparse){
-    int i = N_DECISION_VARIABLES;
-    int j = i + offset_c;
-    int k = offset_z;
 
-    if (sparse){
-        A[j][problem.ke[0]] = -1.0;
-        A[j][problem.ke[1]] = 1.0;
-        A[k+2][problem.ke[2]] = A[j][problem.ke[0]];
-        A[k+3][problem.ke[3]] = A[j][problem.ke[1]];
-
-        A[j+1][problem.ke[4]] = 1.0;
-        A[j+1][problem.ke[5]] = 1.0;
-        A[k+2][problem.ke[6]] = A[j+1][problem.ke[4]];
-        A[k+4][problem.ke[7]] = A[j+1][problem.ke[5]];
-    }
-    else{
-        A[j][k+2] = -1.0;
-        A[j][k+3] = 1.0;
-        A[k+2][j] = A[j][k+2];
-        A[k+3][j] = A[j][k+3];
-
-        A[j+1][k+2] = 1.0;
-        A[j+1][k+4] = 1.0;
-        A[k+2][j+1] = A[j+1][k+2];
-        A[k+4][j+1] = A[j+1][k+4];
-    }
 }
 
 void Load_Jacobian(double **A, double *h, bool sparse){
@@ -344,24 +278,20 @@ void First_Knot_Hessian(double **A, double *z, int knot, int offset_z, bool spar
     int i = offset_z;
     
     if (sparse){
-        A[i+3][problem.k1[28]] = mu / pow(z[i+3], 2);
-        A[i+4][problem.k1[29]] = mu / pow(z[i+4], 2);
+        A[i+2][problem.k1[20]] = (mu/pow(z[i+2] - ub, 2)) + (mu/pow(lb - z[i+2], 2));
     }
     else{
-        A[i+3][i+3] = mu / pow(z[i+3], 2);
-        A[i+4][i+4] = mu / pow(z[i+4], 2);
+        A[i+2][i+2] = (mu/pow(z[i+2] - ub, 2)) + (mu/pow(lb - z[i+2], 2));
     }
 }
 
 void Middle_Knot_Hessian(double **A, double *z, int knot, int offset_z, bool sparse){
     int i = offset_z;
     if (sparse){
-        A[i+3][problem.km[knot-1][24]] = mu / pow(z[i+3], 2);
-        A[i+4][problem.km[knot-1][25]] = mu / pow(z[i+4], 2);
+        A[i+2][problem.km[knot-1][16]] = (mu/pow(z[i+2] - ub, 2)) + (mu/pow(lb - z[i+2], 2));
     }
     else{
-        A[i+3][i+3] = mu / pow(z[i+3], 2);
-        A[i+4][i+4] = mu / pow(z[i+4], 2);
+        A[i+2][i+2] = (mu/pow(z[i+2] - ub, 2)) + (mu/pow(lb - z[i+2], 2));
     }
 }
 
@@ -369,16 +299,14 @@ void End_Knot_Hessian(double **A, double *z, int knot, int offset_z, bool sparse
     int i = offset_z;
     
     if (sparse){
-        A[i][problem.ke[8]] = 2.0;
-        A[i+1][problem.ke[9]] = 2.0;
-        A[i+3][problem.ke[10]] = mu / pow(z[i+3], 2);
-        A[i+4][problem.ke[11]] = mu / pow(z[i+4], 2);
+        A[i][problem.ke[0]] = 2.0;
+        A[i+1][problem.ke[1]] = 2.0;
+        A[i+2][problem.ke[2]] = (mu/pow(z[i+2] - ub, 2)) + (mu/pow(lb - z[i+2], 2));
     }
     else{
         A[i][i] = 2.0;
         A[i+1][i+1] = 2.0;
-        A[i+3][i+3] = mu / pow(z[i+3], 2);
-        A[i+4][i+4] = mu / pow(z[i+4], 2);
+        A[i+2][i+2] = (mu/pow(z[i+2] - ub, 2)) + (mu/pow(lb - z[i+2], 2));
     }
 
 }
@@ -410,57 +338,36 @@ void First_Knot_Eq(double *b, double *z, double *h, int knot, int offset_z, int 
     // p1 = z[offset_z];
     // v1 = z[offset_z+1];
     // a1 = z[offset_z+2];
-    // s_a_lb = z[offset_z+3];
-    // s_a_ub = z[offset_z+4];
     // p2 = z[offset_z+5];
     // v2 = z[offset_z+6];
 
     // Defects
     b[N_DECISION_VARIABLES+offset_c] = 
-        0.5*h[knot]*(problem.knot_params.dx[knot][0] + problem.knot_params.dx[knot+1][0]) + z[offset_z] - z[offset_z+5];
+        0.5*h[knot]*(problem.knot_params.dx[knot][0] + problem.knot_params.dx[knot+1][0]) + z[offset_z] - z[offset_z+3];
     b[N_DECISION_VARIABLES+offset_c+1] = 
-        0.5*h[knot]*(problem.knot_params.dx[knot][1] + problem.knot_params.dx[knot+1][1]) + z[offset_z+1] - z[offset_z+6];
-    // Lower bounds
-    b[N_DECISION_VARIABLES+offset_c+2] = z[offset_z+2] - lb - z[offset_z+3];
-    // Upper bounds
-    b[N_DECISION_VARIABLES+offset_c+3] = ub - z[offset_z+2] - z[offset_z+4];
+        0.5*h[knot]*(problem.knot_params.dx[knot][1] + problem.knot_params.dx[knot+1][1]) + z[offset_z+1] - z[offset_z+4];
     // Initial conditions
-    b[N_DECISION_VARIABLES+offset_c+4] = z[offset_z] - ic[0];
-    b[N_DECISION_VARIABLES+offset_c+5] = z[offset_z+1] - ic[1];
+    b[N_DECISION_VARIABLES+offset_c+2] = z[offset_z] - ic[0];
+    b[N_DECISION_VARIABLES+offset_c+3] = z[offset_z+1] - ic[1];
 }
 
 void Middle_Knot_Eq(double *b, double *z, double *h, int knot, int offset_z, int offset_c){
     // p1 = z[offset_z];
     // v1 = z[offset_z+1];
     // a1 = z[offset_z+2];
-    // s_a_lb = z[offset_z+3];
-    // s_a_ub = z[offset_z+4];
-    // p2 = z[offset_z+5];
-    // v2 = z[offset_z+6];
+    // p2 = z[offset_z+3];
+    // v2 = z[offset_z+4];
 
     // Defects
     b[N_DECISION_VARIABLES+offset_c] = 
-        0.5*h[knot]*(problem.knot_params.dx[knot][0] + problem.knot_params.dx[knot+1][0]) + z[offset_z] - z[offset_z+5];
+        0.5*h[knot]*(problem.knot_params.dx[knot][0] + problem.knot_params.dx[knot+1][0]) + z[offset_z] - z[offset_z+3];
     b[N_DECISION_VARIABLES+offset_c+1] = 
-        0.5*h[knot]*(problem.knot_params.dx[knot][1] + problem.knot_params.dx[knot+1][1]) + z[offset_z+1] - z[offset_z+6];
-    // Lower bounds
-    b[N_DECISION_VARIABLES+offset_c+2] = z[offset_z+2] - lb - z[offset_z+3];
-    // Upper bounds
-    b[N_DECISION_VARIABLES+offset_c+3] = ub - z[offset_z+2] - z[offset_z+4];
+        0.5*h[knot]*(problem.knot_params.dx[knot][1] + problem.knot_params.dx[knot+1][1]) + z[offset_z+1] - z[offset_z+4];
 
 }
 
 void End_Knot_Eq(double *b, double *z, int knot, int offset_z, int offset_c){
-    // p1 = z[offset_z];
-    // v1 = z[offset_z+1];
-    // a1 = z[offset_z+2];
-    // s_a_lb = z[offset_z+3];
-    // s_a_ub = z[offset_z+4];
 
-    // Lower bounds
-    b[N_DECISION_VARIABLES+offset_c] = z[offset_z+2] - lb - z[offset_z+3];
-    // Upper bounds
-    b[N_DECISION_VARIABLES+offset_c+1] = ub - z[offset_z+2] - z[offset_z+4];
 }
 
 void Load_Equalities(double *b, double *z, double *h){
@@ -487,20 +394,17 @@ void Load_Equalities(double *b, double *z, double *h){
 }
 
 void First_Knot_Grad(double *b, double *z, int offset){
-    b[offset+3] = mu / z[offset+3];
-    b[offset+4] = mu / z[offset+4];
+    b[offset+2] = (mu/(z[offset+2] - ub)) - (mu/(lb - z[offset+2]));
 }
 
 void Middle_Knot_Grad(double *b, double *z, int offset){
-    b[offset+3] = mu / z[offset+3];
-    b[offset+4] = mu / z[offset+4];
+    b[offset+2] = (mu/(z[offset+2] - ub)) - (mu/(lb - z[offset+2]));
 }
 
 void End_Knot_Grad(double *b, double *z, int offset){
     b[offset] = 2.0*(xd[0] - z[offset]);
     b[offset+1] = 2.0*(xd[1] - z[offset+1]);
-    b[offset+3] = mu / z[offset+3];
-    b[offset+4] = mu / z[offset+4];
+    b[offset+2] = (mu/(z[offset+2] - ub)) - (mu/(lb - z[offset+2]));
 }
 
 void Load_Gradient(double *b, double *z){
@@ -526,40 +430,29 @@ void Load_First_Knot_Columns(int offset_z, int offset_c){
     // Jacobian
     problem.k1[0] = Search_For_Sparse_Column(j, k);
     problem.k1[1] = Search_For_Sparse_Column(j, k+1);
-    problem.k1[2] = Search_For_Sparse_Column(j, k+5);
-    problem.k1[3] = Search_For_Sparse_Column(j, k+6);
+    problem.k1[2] = Search_For_Sparse_Column(j, k+3);
+    problem.k1[3] = Search_For_Sparse_Column(j, k+4);
     problem.k1[4] = Search_For_Sparse_Column(k, j);
     problem.k1[5] = Search_For_Sparse_Column(k+1, j);
-    problem.k1[6] = Search_For_Sparse_Column(k+5, j);
-    problem.k1[7] = Search_For_Sparse_Column(k+6, j);
+    problem.k1[6] = Search_For_Sparse_Column(k+3, j);
+    problem.k1[7] = Search_For_Sparse_Column(k+4, j);
 
     problem.k1[8] = Search_For_Sparse_Column(j+1, k+1);
     problem.k1[9] = Search_For_Sparse_Column(j+1, k+2);
-    problem.k1[10] = Search_For_Sparse_Column(j+1, k+6);
-    problem.k1[11] = Search_For_Sparse_Column(j+1, k+7);
+    problem.k1[10] = Search_For_Sparse_Column(j+1, k+4);
+    problem.k1[11] = Search_For_Sparse_Column(j+1, k+5);
     problem.k1[12] = Search_For_Sparse_Column(k+1, j+1);
     problem.k1[13] = Search_For_Sparse_Column(k+2, j+1);
-    problem.k1[14] = Search_For_Sparse_Column(k+6, j+1);
-    problem.k1[15] = Search_For_Sparse_Column(k+7, j+1);
+    problem.k1[14] = Search_For_Sparse_Column(k+4, j+1);
+    problem.k1[15] = Search_For_Sparse_Column(k+5, j+1);
 
-    problem.k1[16] = Search_For_Sparse_Column(j+2, k+2);
-    problem.k1[17] = Search_For_Sparse_Column(j+2, k+3);
-    problem.k1[18] = Search_For_Sparse_Column(k+2, j+2);
-    problem.k1[19] = Search_For_Sparse_Column(k+3, j+2);
+    problem.k1[16] = Search_For_Sparse_Column(j+2, k);
+    problem.k1[17] = Search_For_Sparse_Column(k, j+2);
 
-    problem.k1[20] = Search_For_Sparse_Column(j+3, k+2);
-    problem.k1[21] = Search_For_Sparse_Column(j+3, k+4);
-    problem.k1[22] = Search_For_Sparse_Column(k+2, j+3);
-    problem.k1[23] = Search_For_Sparse_Column(k+4, j+3);
+    problem.k1[18] = Search_For_Sparse_Column(j+3, k+1);
+    problem.k1[19] = Search_For_Sparse_Column(k+1, j+3);
 
-    problem.k1[24] = Search_For_Sparse_Column(j+4, k);
-    problem.k1[25] = Search_For_Sparse_Column(k, j+4);
-
-    problem.k1[26] = Search_For_Sparse_Column(j+5, k+1);
-    problem.k1[27] = Search_For_Sparse_Column(k+1, j+5);
-
-    problem.k1[28] = Search_For_Sparse_Column(k+3, k+3);
-    problem.k1[29] = Search_For_Sparse_Column(k+4, k+4);
+    problem.k1[20] = Search_For_Sparse_Column(k+2, k+2);
 }
 
 void Load_Middle_Knot_Columns(int knot, int offset_z, int offset_c){
@@ -570,56 +463,31 @@ void Load_Middle_Knot_Columns(int knot, int offset_z, int offset_c){
 
     problem.km[knot-1][c++] = Search_For_Sparse_Column(j, k);
     problem.km[knot-1][c++] = Search_For_Sparse_Column(j, k+1);
-    problem.km[knot-1][c++] = Search_For_Sparse_Column(j, k+5);
-    problem.km[knot-1][c++] = Search_For_Sparse_Column(j, k+6);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(j, k+3);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(j, k+4);
     problem.km[knot-1][c++] = Search_For_Sparse_Column(k, j);
     problem.km[knot-1][c++] = Search_For_Sparse_Column(k+1, j);
-    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+5, j);
-    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+6, j);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+3, j);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+4, j);
 
     problem.km[knot-1][c++] = Search_For_Sparse_Column(j+1, k+1);
     problem.km[knot-1][c++] = Search_For_Sparse_Column(j+1, k+2);
-    problem.km[knot-1][c++] = Search_For_Sparse_Column(j+1, k+6);
-    problem.km[knot-1][c++] = Search_For_Sparse_Column(j+1, k+7);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(j+1, k+4);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(j+1, k+5);
     problem.km[knot-1][c++] = Search_For_Sparse_Column(k+1, j+1);
     problem.km[knot-1][c++] = Search_For_Sparse_Column(k+2, j+1);
-    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+6, j+1);
-    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+7, j+1);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+4, j+1);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+5, j+1);
 
-    problem.km[knot-1][c++] = Search_For_Sparse_Column(j+2, k+2);
-    problem.km[knot-1][c++] = Search_For_Sparse_Column(j+2, k+3);
-    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+2, j+2);
-    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+3, j+2);
-
-    problem.km[knot-1][c++] = Search_For_Sparse_Column(j+3, k+2);
-    problem.km[knot-1][c++] = Search_For_Sparse_Column(j+3, k+4);
-    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+2, j+3);
-    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+4, j+3);
-
-    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+3, k+3);
-    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+4, k+4);
+    problem.km[knot-1][c++] = Search_For_Sparse_Column(k+2, k+2);
 }
 
 void Load_End_Knot_Columns(int offset_z, int offset_c){
-    int i = N_DECISION_VARIABLES;
-    int j = i + offset_c;
     int k = offset_z;
     int c = 0;
-
-    // jacobian
-    problem.ke[c++] = Search_For_Sparse_Column(j, k+2);
-    problem.ke[c++] = Search_For_Sparse_Column(j, k+3);
-    problem.ke[c++] = Search_For_Sparse_Column(k+2, j);
-    problem.ke[c++] = Search_For_Sparse_Column(k+3, j);
-
-    problem.ke[c++] = Search_For_Sparse_Column(j+1, k+2);
-    problem.ke[c++] = Search_For_Sparse_Column(j+1, k+4);
-    problem.ke[c++] = Search_For_Sparse_Column(k+2, j+1);
-    problem.ke[c++] = Search_For_Sparse_Column(k+4, j+1);
 
     // hessian
     problem.ke[c++] = Search_For_Sparse_Column(k, k);
     problem.ke[c++] = Search_For_Sparse_Column(k+1, k+1);
-    problem.ke[c++] = Search_For_Sparse_Column(k+3, k+3);
-    problem.ke[c++] = Search_For_Sparse_Column(k+4, k+4);
+    problem.ke[c++] = Search_For_Sparse_Column(k+2, k+2);
 }
