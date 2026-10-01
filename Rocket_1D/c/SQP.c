@@ -68,9 +68,6 @@ void Initial_Problem_Data(){
     // Simulate the rocket using constant thrust
     Simulate_Rocket(z, h);
 
-    // Set slack variables
-    Load_slack(z);
-
 }
 
 void Initial_Solve(){
@@ -190,7 +187,7 @@ sqp_results Run_SQP(){
     const int max_iterations = 10;
     int i, iterations;
     double pf, df;
-    const double pf_tolerance = 1.0e-6;
+    const double pf_tolerance = 1.0e-2;
     const double df_tolerance = 1.0e-3;
     bool converged = false;
 

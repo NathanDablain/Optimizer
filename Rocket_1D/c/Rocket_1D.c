@@ -44,9 +44,7 @@ knots problem;
 // 1 -> velocity,
 // 2 -> mass,
 // 3 -> thrust,
-// 4 -> mass slack low,
-// 5 -> thrust slack low,
-// 6 -> thrust slack high
+
 double Get_tf(){
     return tf;
 }
@@ -78,18 +76,6 @@ void Simulate_Rocket(double *z, double *dt){
     }
 }
 
-
-void Load_slack(double *z){
-    int i, j;
-
-    for (i = 0; i < N_KNOTS; i++){
-        j = KNOT_SIZE*i;
-        z[j+4] = z[j+2] - lb[0];
-        z[j+5] = z[j+3] - lb[1];
-        z[j+6] = ub - z[j+3];
-    }
-}
-
 void Load_Problem_Data(double **A, double *b, double *z, double *lambda, double *h, bool sparse){
     // Update and load the gradient of the cost function wrt the decision variables
     Load_Gradient(b, z);
@@ -107,18 +93,24 @@ void Load_Problem_Data(double **A, double *b, double *z, double *lambda, double 
 }
 
 double First_Knot_Cost(double *z_knot){
-    double contribution = -mu*(log(z_knot[4]) + log(z_knot[5]) + log(z_knot[6]));
+    double contribution = -mu*(log(z_knot[2] - lb[0]) +
+                               log(z_knot[3] - lb[1]) +
+                               log(ub - z_knot[3]));
     return contribution;
 }
 
 double Middle_Knot_Cost(double *z_knot){
-    double contribution = -mu*(log(z_knot[4]) + log(z_knot[5]) + log(z_knot[6]));
+    double contribution = -mu*(log(z_knot[2] - lb[0]) +
+                               log(z_knot[3] - lb[1]) +
+                               log(ub - z_knot[3]));
     return contribution;
 }
 
 double End_Knot_Cost(double *z_knot){
     double contribution = pow(z_knot[0] - xd, 2) - 
-        mu*(log(z_knot[4]) + log(z_knot[5]) + log(z_knot[6]));
+                        mu*(log(z_knot[2] - lb[0]) +
+                            log(z_knot[3] - lb[1]) +
+                            log(ub - z_knot[3]));
     return contribution;
 }
 
@@ -142,31 +134,32 @@ double Get_Cost(double *z){
 
 double Select_Alpha(double *z, double *delta_z){
     double z_new[N_DECISION_VARIABLES];
+    double slack_new[N_LBS + N_UBS];
+    double slack_cur[N_LBS + N_UBS];
     double alpha_check;
     double alpha = 1.0;
     const double tau = 0.995;
-    int i, offset_z;
+    int i, j, offset_z;
     // First check the maximum alpha that will keep our slack variables positive
     for (i = 0; i < N_DECISION_VARIABLES; i++)
         z_new[i] = z[i] + delta_z[i];
 
     for (i = 0; i < N_KNOTS; i++){
         offset_z = i*KNOT_SIZE;
-        if (z_new[offset_z+4] <= 0.0 && delta_z[offset_z+4] < 0.0){
-            alpha_check = - z[offset_z+4] / delta_z[offset_z+4];
-            if (alpha_check < alpha)
-                alpha = alpha_check;
+        slack_new[0] = z_new[offset_z+2] - lb[0];
+        slack_new[1] = z_new[offset_z+3] - lb[1];
+        slack_new[2] = ub - z_new[offset_z+3];
+        slack_cur[0] = z[offset_z+2] - lb[0];
+        slack_cur[1] = z[offset_z+3] - lb[1];
+        slack_cur[2] = ub - z[offset_z+3];
+        for (j = 0; j < N_LBS + N_UBS; j++){
+            if (slack_new[j] <= 0.0) {
+                alpha_check = -slack_cur[j] / (slack_new[j] - slack_cur[j]);
+                if (alpha_check < alpha)
+                    alpha = alpha_check;
+            }
         }
-        if (z_new[offset_z+5] <= 0.0 && delta_z[offset_z+5] < 0.0){
-            alpha_check = - z[offset_z+5] / delta_z[offset_z+5];
-            if (alpha_check < alpha)
-                alpha = alpha_check;
-        }
-        if (z_new[offset_z+6] <= 0.0 && delta_z[offset_z+6] < 0.0){
-            alpha_check = - z[offset_z+6] / delta_z[offset_z+6];
-            if (alpha_check < alpha)
-                alpha = alpha_check;
-        }
+
     }
 
     alpha *= tau;
@@ -176,7 +169,6 @@ double Select_Alpha(double *z, double *delta_z){
     double amid1, amid2, cost1, cost2;
     double zmid1[N_DECISION_VARIABLES];
     double zmid2[N_DECISION_VARIABLES];
-    int j;
     const int max_ternary = 12;
     for (i = 0; i < max_ternary; i++){
         amid1 = alow + (1.0/3.0)*(ahigh - alow);
@@ -226,10 +218,10 @@ void First_Knot_Jacobian(double **A, double *z, double *h, int knot, int offset_
     const double g_part_h2 = problem.knot_params.g_part_h[knot+1];
     const double rho_part_h2 = problem.knot_params.rho_part_h[knot+1];
     const double c_D_part_s2 = problem.knot_params.c_D_part_s[knot+1];
-    // const double h2 = z[offset_z+7];
-    const double v2 = z[offset_z+8];
-    const double m2 = z[offset_z+9];
-    const double T2 = z[offset_z+10];
+    // const double h2 = z[offset_z+4];
+    const double v2 = z[offset_z+5];
+    const double m2 = z[offset_z+6];
+    const double T2 = z[offset_z+7];
 
     if (sparse){
         A[j][problem.k1[0]] = -1.0;
@@ -238,8 +230,8 @@ void First_Knot_Jacobian(double **A, double *z, double *h, int knot, int offset_
         A[j][problem.k1[3]] = c1;
         A[k][problem.k1[4]] = A[j][problem.k1[0]];
         A[k+1][problem.k1[5]] = A[j][problem.k1[1]];
-        A[k+7][problem.k1[6]] = A[j][problem.k1[2]];
-        A[k+8][problem.k1[7]] = A[j][problem.k1[3]];
+        A[k+4][problem.k1[6]] = A[j][problem.k1[2]];
+        A[k+5][problem.k1[7]] = A[j][problem.k1[3]];
 
         A[j+1][problem.k1[8]] = MAX(h[knot]*(c_A*v1*v1*c_D1*rho_part_h1 + 2.0*m1*g_part_h1)/(4*m1),A_MIN);
         A[j+1][problem.k1[9]] = MAX((c_A*h[knot]*v1*(v1*c_D_part_s1 + 2.0*c_D1)*rho1/4.0 - m1)/m1,A_MIN);
@@ -253,10 +245,10 @@ void First_Knot_Jacobian(double **A, double *z, double *h, int knot, int offset_
         A[k+1][problem.k1[17]] = A[j+1][problem.k1[9]];
         A[k+2][problem.k1[18]] = A[j+1][problem.k1[10]];
         A[k+3][problem.k1[19]] = A[j+1][problem.k1[11]];
-        A[k+7][problem.k1[20]] = A[j+1][problem.k1[12]];
-        A[k+8][problem.k1[21]] = A[j+1][problem.k1[13]];
-        A[k+9][problem.k1[22]] = A[j+1][problem.k1[14]];
-        A[k+10][problem.k1[23]] = A[j+1][problem.k1[15]]; 
+        A[k+4][problem.k1[20]] = A[j+1][problem.k1[12]];
+        A[k+5][problem.k1[21]] = A[j+1][problem.k1[13]];
+        A[k+6][problem.k1[22]] = A[j+1][problem.k1[14]];
+        A[k+7][problem.k1[23]] = A[j+1][problem.k1[15]]; 
 
         A[j+2][problem.k1[24]] = -1.0;
         A[j+2][problem.k1[25]] = -c1 / c_C;
@@ -264,92 +256,62 @@ void First_Knot_Jacobian(double **A, double *z, double *h, int knot, int offset_
         A[j+2][problem.k1[27]] = -c1 / c_C;
         A[k+2][problem.k1[28]] = A[j+2][problem.k1[24]];
         A[k+3][problem.k1[29]] = A[j+2][problem.k1[25]];
-        A[k+9][problem.k1[30]] = A[j+2][problem.k1[26]];
-        A[k+10][problem.k1[31]] = A[j+2][problem.k1[27]];
+        A[k+6][problem.k1[30]] = A[j+2][problem.k1[26]];
+        A[k+7][problem.k1[31]] = A[j+2][problem.k1[27]];
 
         A[j+3][problem.k1[32]] = -1.0;
-        A[j+3][problem.k1[33]] = 1.0;
-        A[k+2][problem.k1[34]] = A[j+3][problem.k1[32]];
-        A[k+4][problem.k1[35]] = A[j+3][problem.k1[33]];
+        A[k][problem.k1[33]] = A[j+3][problem.k1[32]];
 
-        A[j+4][problem.k1[36]] = -1.0;
-        A[j+4][problem.k1[37]] = 1.0;
-        A[k+3][problem.k1[38]] = A[j+4][problem.k1[36]];
-        A[k+5][problem.k1[39]] = A[j+4][problem.k1[37]];
+        A[j+4][problem.k1[34]] = -1.0;
+        A[k+1][problem.k1[35]] = A[j+4][problem.k1[34]];
 
-        A[j+5][problem.k1[40]] = 1.0;
-        A[j+5][problem.k1[41]] = 1.0;
-        A[k+3][problem.k1[42]] = A[j+5][problem.k1[40]];
-        A[k+6][problem.k1[43]] = A[j+5][problem.k1[41]];
-
-        A[j+6][problem.k1[44]] = -1.0;
-        A[k][problem.k1[45]] = A[j+6][problem.k1[44]];
-
-        A[j+7][problem.k1[46]] = -1.0;
-        A[k+1][problem.k1[47]] = A[j+7][problem.k1[46]];
-
-        A[j+8][problem.k1[48]] = -1.0;
-        A[k+2][problem.k1[49]] = A[j+8][problem.k1[48]];
+        A[j+5][problem.k1[36]] = -1.0;
+        A[k+2][problem.k1[37]] = A[j+5][problem.k1[36]];
     }
     else{
         A[j][k] = -1.0;
         A[j][k+1] = c1;
-        A[j][k+7] = 1.0;
-        A[j][k+8] = c1;
+        A[j][k+4] = 1.0;
+        A[j][k+5] = c1;
         A[k][j] = A[j][k];
         A[k+1][j] = A[j][k+1];
-        A[k+7][j] = A[j][k+7];
-        A[k+8][j] = A[j][k+8];
+        A[k+4][j] = A[j][k+4];
+        A[k+5][j] = A[j][k+5];
 
         A[j+1][k] = MAX(h[knot]*(c_A*v1*v1*c_D1*rho_part_h1 + 2.0*m1*g_part_h1)/(4*m1),A_MIN);
         A[j+1][k+1] = MAX((c_A*h[knot]*v1*(v1*c_D_part_s1 + 2.0*c_D1)*rho1/4.0 - m1)/m1,A_MIN);
         A[j+1][k+2] = MAX(h[knot]*(-c_A*v1*v1*c_D1*rho1 + 2.0*T1)/(4*m1*m1),A_MIN);
         A[j+1][k+3] = MAX(c1/m1,A_MIN);
-        A[j+1][k+7] = MAX(h[knot]*(c_A*v2*v2*c_D2*rho_part_h2 + 2.0*m2*g_part_h2)/(4*m2),A_MIN);
-        A[j+1][k+8] = MAX((c_A*h[knot]*v2*(v2*c_D_part_s2 + 2.0*c_D2)*rho2/4.0 + m2)/m2,A_MIN);
-        A[j+1][k+9] = MAX(h[knot]*(-c_A*v2*v2*c_D2*rho2 + 2.0*T2)/(4*m2*m2),A_MIN);
-        A[j+1][k+10] = MAX(c1/m2,A_MIN);
+        A[j+1][k+4] = MAX(h[knot]*(c_A*v2*v2*c_D2*rho_part_h2 + 2.0*m2*g_part_h2)/(4*m2),A_MIN);
+        A[j+1][k+5] = MAX((c_A*h[knot]*v2*(v2*c_D_part_s2 + 2.0*c_D2)*rho2/4.0 + m2)/m2,A_MIN);
+        A[j+1][k+6] = MAX(h[knot]*(-c_A*v2*v2*c_D2*rho2 + 2.0*T2)/(4*m2*m2),A_MIN);
+        A[j+1][k+7] = MAX(c1/m2,A_MIN);
         A[k][j+1] = A[j+1][k];
         A[k+1][j+1] = A[j+1][k+1];
         A[k+2][j+1] = A[j+1][k+2];
         A[k+3][j+1] = A[j+1][k+3];
-        A[k+7][j+1] = A[j+1][k+7];
-        A[k+8][j+1] = A[j+1][k+8];
-        A[k+9][j+1] = A[j+1][k+9];
-        A[k+10][j+1] = A[j+1][k+10]; 
+        A[k+4][j+1] = A[j+1][k+4];
+        A[k+5][j+1] = A[j+1][k+5];
+        A[k+6][j+1] = A[j+1][k+6];
+        A[k+7][j+1] = A[j+1][k+7]; 
 
         A[j+2][k+2] = -1.0;
         A[j+2][k+3] = -c1 / c_C;
-        A[j+2][k+9] = 1.0;
-        A[j+2][k+10] = -c1 / c_C;
+        A[j+2][k+6] = 1.0;
+        A[j+2][k+7] = -c1 / c_C;
         A[k+2][j+2] = A[j+2][k+2];
         A[k+3][j+2] = A[j+2][k+3];
-        A[k+9][j+2] = A[j+2][k+9];
-        A[k+10][j+2] = A[j+2][k+10];
+        A[k+6][j+2] = A[j+2][k+6];
+        A[k+7][j+2] = A[j+2][k+7];
 
-        A[j+3][k+2] = -1.0;
-        A[j+3][k+4] = 1.0;
-        A[k+2][j+3] = A[j+3][k+2];
-        A[k+4][j+3] = A[j+3][k+4];
+        A[j+3][k] = -1.0;
+        A[k][j+3] = A[j+3][k];
 
-        A[j+4][k+3] = -1.0;
-        A[j+4][k+5] = 1.0;
-        A[k+3][j+4] = A[j+4][k+3];
-        A[k+5][j+4] = A[j+4][k+5];
+        A[j+4][k+1] = -1.0;
+        A[k+1][j+4] = A[j+4][k+1];
 
-        A[j+5][k+3] = 1.0;
-        A[j+5][k+6] = 1.0;
-        A[k+3][j+5] = A[j+5][k+3];
-        A[k+6][j+5] = A[j+5][k+6];
-
-        A[j+6][k] = -1.0;
-        A[k][j+6] = A[j+6][k];
-
-        A[j+7][k+1] = -1.0;
-        A[k+1][j+7] = A[j+7][k+1];
-
-        A[j+8][k+2] = -1.0;
-        A[k+2][j+8] = A[j+8][k+2];
+        A[j+5][k+2] = -1.0;
+        A[k+2][j+5] = A[j+5][k+2];
     }
 }
 
@@ -378,10 +340,10 @@ void Middle_Knot_Jacobian(double **A, double *z, double *h, int knot, int offset
     const double g_part_h2 = problem.knot_params.g_part_h[knot+1];
     const double rho_part_h2 = problem.knot_params.rho_part_h[knot+1];
     const double c_D_part_s2 = problem.knot_params.c_D_part_s[knot+1];
-    // const double h2 = z[offset_z+7];
-    const double v2 = z[offset_z+8];
-    const double m2 = z[offset_z+9];
-    const double T2 = z[offset_z+10];
+    // const double h2 = z[offset_z+4];
+    const double v2 = z[offset_z+5];
+    const double m2 = z[offset_z+6];
+    const double T2 = z[offset_z+7];
 
     if (sparse){
         A[j][problem.km[knot-1][0]] = -1.0;
@@ -390,8 +352,8 @@ void Middle_Knot_Jacobian(double **A, double *z, double *h, int knot, int offset
         A[j][problem.km[knot-1][3]] = c1;
         A[k][problem.km[knot-1][4]] = A[j][problem.km[knot-1][0]];
         A[k+1][problem.km[knot-1][5]] = A[j][problem.km[knot-1][1]];
-        A[k+7][problem.km[knot-1][6]] = A[j][problem.km[knot-1][2]];
-        A[k+8][problem.km[knot-1][7]] = A[j][problem.km[knot-1][3]];
+        A[k+4][problem.km[knot-1][6]] = A[j][problem.km[knot-1][2]];
+        A[k+5][problem.km[knot-1][7]] = A[j][problem.km[knot-1][3]];
 
         A[j+1][problem.km[knot-1][8]] = MAX(h[knot]*(c_A*v1*v1*c_D1*rho_part_h1 + 2.0*m1*g_part_h1)/(4*m1),A_MIN);
         A[j+1][problem.km[knot-1][9]] = MAX((c_A*h[knot]*v1*(v1*c_D_part_s1 + 2.0*c_D1)*rho1/4.0 - m1)/m1,A_MIN);
@@ -405,10 +367,10 @@ void Middle_Knot_Jacobian(double **A, double *z, double *h, int knot, int offset
         A[k+1][problem.km[knot-1][17]] = A[j+1][problem.km[knot-1][9]];
         A[k+2][problem.km[knot-1][18]] = A[j+1][problem.km[knot-1][10]];
         A[k+3][problem.km[knot-1][19]] = A[j+1][problem.km[knot-1][11]];
-        A[k+7][problem.km[knot-1][20]] = A[j+1][problem.km[knot-1][12]];
-        A[k+8][problem.km[knot-1][21]] = A[j+1][problem.km[knot-1][13]];
-        A[k+9][problem.km[knot-1][22]] = A[j+1][problem.km[knot-1][14]];
-        A[k+10][problem.km[knot-1][23]] = A[j+1][problem.km[knot-1][15]]; 
+        A[k+4][problem.km[knot-1][20]] = A[j+1][problem.km[knot-1][12]];
+        A[k+5][problem.km[knot-1][21]] = A[j+1][problem.km[knot-1][13]];
+        A[k+6][problem.km[knot-1][22]] = A[j+1][problem.km[knot-1][14]];
+        A[k+7][problem.km[knot-1][23]] = A[j+1][problem.km[knot-1][15]]; 
 
         A[j+2][problem.km[knot-1][24]] = -1.0;
         A[j+2][problem.km[knot-1][25]] = -c1 / c_C;
@@ -416,114 +378,51 @@ void Middle_Knot_Jacobian(double **A, double *z, double *h, int knot, int offset
         A[j+2][problem.km[knot-1][27]] = -c1 / c_C;
         A[k+2][problem.km[knot-1][28]] = A[j+2][problem.km[knot-1][24]];
         A[k+3][problem.km[knot-1][29]] = A[j+2][problem.km[knot-1][25]];
-        A[k+9][problem.km[knot-1][30]] = A[j+2][problem.km[knot-1][26]];
-        A[k+10][problem.km[knot-1][31]] = A[j+2][problem.km[knot-1][27]];
+        A[k+6][problem.km[knot-1][30]] = A[j+2][problem.km[knot-1][26]];
+        A[k+7][problem.km[knot-1][31]] = A[j+2][problem.km[knot-1][27]];
 
-        A[j+3][problem.km[knot-1][32]] = -1.0;
-        A[j+3][problem.km[knot-1][33]] = 1.0;
-        A[k+2][problem.km[knot-1][34]] = A[j+3][problem.km[knot-1][32]];
-        A[k+4][problem.km[knot-1][35]] = A[j+3][problem.km[knot-1][33]];
-
-        A[j+4][problem.km[knot-1][36]] = -1.0;
-        A[j+4][problem.km[knot-1][37]] = 1.0;
-        A[k+3][problem.km[knot-1][38]] = A[j+4][problem.km[knot-1][36]];
-        A[k+5][problem.km[knot-1][39]] = A[j+4][problem.km[knot-1][37]];
-
-        A[j+5][problem.km[knot-1][40]] = 1.0;
-        A[j+5][problem.km[knot-1][41]] = 1.0;
-        A[k+3][problem.km[knot-1][42]] = A[j+5][problem.km[knot-1][40]];
-        A[k+6][problem.km[knot-1][43]] = A[j+5][problem.km[knot-1][41]];
     }
     else{
         A[j][k] = -1.0;
         A[j][k+1] = c1;
-        A[j][k+7] = 1.0;
-        A[j][k+8] = c1;
+        A[j][k+4] = 1.0;
+        A[j][k+5] = c1;
         A[k][j] = A[j][k];
         A[k+1][j] = A[j][k+1];
-        A[k+7][j] = A[j][k+7];
-        A[k+8][j] = A[j][k+8];
+        A[k+4][j] = A[j][k+4];
+        A[k+5][j] = A[j][k+5];
 
         A[j+1][k] = MAX(h[knot]*(c_A*v1*v1*c_D1*rho_part_h1 + 2.0*m1*g_part_h1)/(4*m1),A_MIN);
         A[j+1][k+1] = MAX((c_A*h[knot]*v1*(v1*c_D_part_s1 + 2.0*c_D1)*rho1/4.0 - m1)/m1,A_MIN);
         A[j+1][k+2] = MAX(h[knot]*(-c_A*v1*v1*c_D1*rho1 + 2.0*T1)/(4*m1*m1),A_MIN);
         A[j+1][k+3] = MAX(c1/m1,A_MIN);
-        A[j+1][k+7] = MAX(h[knot]*(c_A*v2*v2*c_D2*rho_part_h2 + 2.0*m2*g_part_h2)/(4*m2),A_MIN);
-        A[j+1][k+8] = MAX((c_A*h[knot]*v2*(v2*c_D_part_s2 + 2.0*c_D2)*rho2/4.0 + m2)/m2,A_MIN);
-        A[j+1][k+9] = MAX(h[knot]*(-c_A*v2*v2*c_D2*rho2 + 2.0*T2)/(4*m2*m2),A_MIN);
-        A[j+1][k+10] = MAX(c1/m2,A_MIN);
+        A[j+1][k+4] = MAX(h[knot]*(c_A*v2*v2*c_D2*rho_part_h2 + 2.0*m2*g_part_h2)/(4*m2),A_MIN);
+        A[j+1][k+5] = MAX((c_A*h[knot]*v2*(v2*c_D_part_s2 + 2.0*c_D2)*rho2/4.0 + m2)/m2,A_MIN);
+        A[j+1][k+6] = MAX(h[knot]*(-c_A*v2*v2*c_D2*rho2 + 2.0*T2)/(4*m2*m2),A_MIN);
+        A[j+1][k+7] = MAX(c1/m2,A_MIN);
         A[k][j+1] = A[j+1][k];
         A[k+1][j+1] = A[j+1][k+1];
         A[k+2][j+1] = A[j+1][k+2];
         A[k+3][j+1] = A[j+1][k+3];
-        A[k+7][j+1] = A[j+1][k+7];
-        A[k+8][j+1] = A[j+1][k+8];
-        A[k+9][j+1] = A[j+1][k+9];
-        A[k+10][j+1] = A[j+1][k+10]; 
+        A[k+4][j+1] = A[j+1][k+4];
+        A[k+5][j+1] = A[j+1][k+5];
+        A[k+6][j+1] = A[j+1][k+6];
+        A[k+7][j+1] = A[j+1][k+7]; 
 
         A[j+2][k+2] = -1.0;
         A[j+2][k+3] = -c1 / c_C;
-        A[j+2][k+9] = 1.0;
-        A[j+2][k+10] = -c1 / c_C;
+        A[j+2][k+6] = 1.0;
+        A[j+2][k+7] = -c1 / c_C;
         A[k+2][j+2] = A[j+2][k+2];
         A[k+3][j+2] = A[j+2][k+3];
-        A[k+9][j+2] = A[j+2][k+9];
-        A[k+10][j+2] = A[j+2][k+10];
+        A[k+6][j+2] = A[j+2][k+6];
+        A[k+7][j+2] = A[j+2][k+7];
 
-        A[j+3][k+2] = -1.0;
-        A[j+3][k+4] = 1.0;
-        A[k+2][j+3] = A[j+3][k+2];
-        A[k+4][j+3] = A[j+3][k+4];
-
-        A[j+4][k+3] = -1.0;
-        A[j+4][k+5] = 1.0;
-        A[k+3][j+4] = A[j+4][k+3];
-        A[k+5][j+4] = A[j+4][k+5];
-
-        A[j+5][k+3] = 1.0;
-        A[j+5][k+6] = 1.0;
-        A[k+3][j+5] = A[j+5][k+3];
-        A[k+6][j+5] = A[j+5][k+6];
     }
 }
 
 void End_Knot_Jacobian(double **A, int knot, int offset_z, int offset_c, bool sparse){
-    int i = N_DECISION_VARIABLES;
-    int j = i + offset_c;
-    int k = offset_z;
-
-    if (sparse){
-        A[j][problem.ke[0]] = -1.0;
-        A[j][problem.ke[1]] = 1.0;
-        A[k+2][problem.ke[2]] = A[j][problem.ke[0]];
-        A[k+4][problem.ke[3]] = A[j][problem.ke[1]];
-
-        A[j+1][problem.ke[4]] = -1.0;
-        A[j+1][problem.ke[5]] = 1.0;
-        A[k+3][problem.ke[6]] = A[j+1][problem.ke[4]];
-        A[k+5][problem.ke[7]] = A[j+1][problem.ke[5]];
-
-        A[j+2][problem.ke[8]] = 1.0;
-        A[j+2][problem.ke[9]] = 1.0;
-        A[k+3][problem.ke[10]] = A[j+2][problem.ke[8]];
-        A[k+6][problem.ke[11]] = A[j+2][problem.ke[9]];
-    }
-    else{
-        A[j][k+2] = -1.0;
-        A[j][k+4] = 1.0;
-        A[k+2][j] = A[j][k+2];
-        A[k+4][j] = A[j][k+4];
-
-        A[j+1][k+3] = -1.0;
-        A[j+1][k+5] = 1.0;
-        A[k+3][j+1] = A[j+1][k+3];
-        A[k+5][j+1] = A[j+1][k+5];
-
-        A[j+2][k+3] = 1.0;
-        A[j+2][k+6] = 1.0;
-        A[k+3][j+2] = A[j+2][k+3];
-        A[k+6][j+2] = A[j+2][k+6];
-    }
+    
 }
 
 void Load_Jacobian(double **A, double *z, double *h, bool sparse){
@@ -563,32 +462,25 @@ void First_Knot_Hessian(double **A, double *z, double *h, double *lambda,
     const double v1 = z[offset_z+1];
     const double m1 = z[offset_z+2];
     const double T1 = z[offset_z+3];
-    const double s_m_lb = z[offset_z+4];
-    const double s_T_lb = z[offset_z+5];
-    const double s_T_ub = z[offset_z+6];
+
     const double lambda2 = lambda[offset_c+1];
 
     if (sparse){
-        A[i][problem.k1[50]] = MAX((h[knot]*lambda2*(c_A*v1*v1*c_D1*rho_part_h2 + 2.0*m1*g_part_h2))/(4*m1),A_MIN);
-        A[i][problem.k1[51]] = MAX((c_A*h[knot]*lambda2*v1*(v1*c_D_part_s + 2.0*c_D1)*rho_part_h)/(4*m1),A_MIN);
-        A[i][problem.k1[52]] = MAX((-c_A*h[knot]*lambda2*v1*v1*c_D1*rho_part_h)/(4*m1*m1),A_MIN);
+        A[i][problem.k1[38]] = MAX((h[knot]*lambda2*(c_A*v1*v1*c_D1*rho_part_h2 + 2.0*m1*g_part_h2))/(4*m1),A_MIN);
+        A[i][problem.k1[39]] = MAX((c_A*h[knot]*lambda2*v1*(v1*c_D_part_s + 2.0*c_D1)*rho_part_h)/(4*m1),A_MIN);
+        A[i][problem.k1[40]] = MAX((-c_A*h[knot]*lambda2*v1*v1*c_D1*rho_part_h)/(4*m1*m1),A_MIN);
         
-        A[i+1][problem.k1[53]] = A[i][problem.k1[51]];
-        A[i+1][problem.k1[54]] = MAX(c_A*h[knot]*lambda2*(v1*v1*c_D_part_s2 + 4.0*v1*c_D_part_s + 2.0*c_D1)*rho1/(4.0*m1),A_MIN);
-        A[i+1][problem.k1[55]] = MAX(-c_A*h[knot]*lambda2*v1*(v1*c_D_part_s + 2.0*c_D1)*rho1/(4.0*m1*m1),A_MIN);
+        A[i+1][problem.k1[41]] = A[i][problem.k1[39]];
+        A[i+1][problem.k1[42]] = MAX(c_A*h[knot]*lambda2*(v1*v1*c_D_part_s2 + 4.0*v1*c_D_part_s + 2.0*c_D1)*rho1/(4.0*m1),A_MIN);
+        A[i+1][problem.k1[43]] = MAX(-c_A*h[knot]*lambda2*v1*(v1*c_D_part_s + 2.0*c_D1)*rho1/(4.0*m1*m1),A_MIN);
 
-        A[i+2][problem.k1[56]] = A[i][problem.k1[52]];
-        A[i+2][problem.k1[57]] = A[i+1][problem.k1[55]];
-        A[i+2][problem.k1[58]] = MAX(h[knot]*lambda2*(c_A*v1*v1*c_D1*rho1 - 2.0*T1)/(2.0*m1*m1*m1),A_MIN);
-        A[i+2][problem.k1[59]] = MAX(h[knot]*lambda2/(2.0*m1*m1),A_MIN);
+        A[i+2][problem.k1[44]] = A[i][problem.k1[40]];
+        A[i+2][problem.k1[45]] = A[i+1][problem.k1[43]];
+        A[i+2][problem.k1[46]] = MAX(h[knot]*lambda2*(c_A*v1*v1*c_D1*rho1 - 2.0*T1)/(2.0*m1*m1*m1),A_MIN) + (mu/pow(lb[0] - m1, 2));
+        A[i+2][problem.k1[47]] = MAX(h[knot]*lambda2/(2.0*m1*m1),A_MIN);
 
-        A[i+3][problem.k1[60]] = A[i+2][problem.k1[59]];
-        
-        A[i+4][problem.k1[61]] = mu / pow(s_m_lb,2);
-
-        A[i+5][problem.k1[62]] = mu / pow(s_T_lb,2);
-
-        A[i+6][problem.k1[63]] = mu / pow(s_T_ub,2);
+        A[i+3][problem.k1[48]] = A[i+2][problem.k1[47]];
+        A[i+3][problem.k1[49]] = (mu/pow(T1 - ub, 2)) + (mu/pow(lb[1] - T1, 2));
     }
     else{
         A[i][i] = MAX((h[knot]*lambda2*(c_A*v1*v1*c_D1*rho_part_h2 + 2.0*m1*g_part_h2))/(4*m1),A_MIN);
@@ -601,16 +493,12 @@ void First_Knot_Hessian(double **A, double *z, double *h, double *lambda,
 
         A[i+2][i] = A[i][i+2];
         A[i+2][i+1] = A[i+1][i+2];
-        A[i+2][i+2] = MAX(h[knot]*lambda2*(c_A*v1*v1*c_D1*rho1 - 2.0*T1)/(2.0*m1*m1*m1),A_MIN);
+        A[i+2][i+2] = MAX(h[knot]*lambda2*(c_A*v1*v1*c_D1*rho1 - 2.0*T1)/(2.0*m1*m1*m1),A_MIN) + (mu/pow(lb[0] - m1, 2));
         A[i+2][i+3] = MAX(h[knot]*lambda2/(2.0*m1*m1),A_MIN);
 
         A[i+3][i+2] = A[i+2][i+3];
-        
-        A[i+4][i+4] = mu / pow(s_m_lb,2);
+        A[i+3][i+3] = (mu/pow(T1 - ub, 2)) + (mu/pow(lb[1] - T1, 2));
 
-        A[i+5][i+5] = mu / pow(s_T_lb,2);
-
-        A[i+6][i+6] = mu / pow(s_T_ub,2);
     }
 }
 
@@ -633,32 +521,26 @@ void Middle_Knot_Hessian(double **A, double *z, double *h, double *lambda,
     const double v1 = z[offset_z+1];
     const double m1 = z[offset_z+2];
     const double T1 = z[offset_z+3];
-    const double s_m_lb = z[offset_z+4];
-    const double s_T_lb = z[offset_z+5];
-    const double s_T_ub = z[offset_z+6];
+
     const double lambda2 = lambda[offset_c+1] + lambda[offset_c_last+1];
 
     if (sparse){
-        A[i][problem.km[knot-1][44]] = MAX((h[knot]*lambda2*(c_A*v1*v1*c_D1*rho_part_h2 + 2.0*m1*g_part_h2))/(4*m1),A_MIN);
-        A[i][problem.km[knot-1][45]] = MAX((c_A*h[knot]*lambda2*v1*(v1*c_D_part_s + 2.0*c_D1)*rho_part_h)/(4*m1),A_MIN);
-        A[i][problem.km[knot-1][46]] = MAX((-c_A*h[knot]*lambda2*v1*v1*c_D1*rho_part_h)/(4*m1*m1),A_MIN);
+        A[i][problem.km[knot-1][32]] = MAX((h[knot]*lambda2*(c_A*v1*v1*c_D1*rho_part_h2 + 2.0*m1*g_part_h2))/(4*m1),A_MIN);
+        A[i][problem.km[knot-1][33]] = MAX((c_A*h[knot]*lambda2*v1*(v1*c_D_part_s + 2.0*c_D1)*rho_part_h)/(4*m1),A_MIN);
+        A[i][problem.km[knot-1][34]] = MAX((-c_A*h[knot]*lambda2*v1*v1*c_D1*rho_part_h)/(4*m1*m1),A_MIN);
         
-        A[i+1][problem.km[knot-1][47]] = A[i][problem.km[knot-1][45]];
-        A[i+1][problem.km[knot-1][48]] = MAX(c_A*h[knot]*lambda2*(v1*v1*c_D_part_s2 + 4.0*v1*c_D_part_s + 2.0*c_D1)*rho1/(4.0*m1),A_MIN);
-        A[i+1][problem.km[knot-1][49]] = MAX(-c_A*h[knot]*lambda2*v1*(v1*c_D_part_s + 2.0*c_D1)*rho1/(4.0*m1*m1),A_MIN);
+        A[i+1][problem.km[knot-1][35]] = A[i][problem.km[knot-1][33]];
+        A[i+1][problem.km[knot-1][36]] = MAX(c_A*h[knot]*lambda2*(v1*v1*c_D_part_s2 + 4.0*v1*c_D_part_s + 2.0*c_D1)*rho1/(4.0*m1),A_MIN);
+        A[i+1][problem.km[knot-1][37]] = MAX(-c_A*h[knot]*lambda2*v1*(v1*c_D_part_s + 2.0*c_D1)*rho1/(4.0*m1*m1),A_MIN);
 
-        A[i+2][problem.km[knot-1][50]] = A[i][problem.km[knot-1][46]];
-        A[i+2][problem.km[knot-1][51]] = A[i+1][problem.km[knot-1][49]];
-        A[i+2][problem.km[knot-1][52]] = MAX(h[knot]*lambda2*(c_A*v1*v1*c_D1*rho1 - 2.0*T1)/(2.0*m1*m1*m1),A_MIN);
-        A[i+2][problem.km[knot-1][53]] = MAX(h[knot]*lambda2/(2.0*m1*m1),A_MIN);
+        A[i+2][problem.km[knot-1][38]] = A[i][problem.km[knot-1][34]];
+        A[i+2][problem.km[knot-1][39]] = A[i+1][problem.km[knot-1][37]];
+        A[i+2][problem.km[knot-1][40]] = MAX(h[knot]*lambda2*(c_A*v1*v1*c_D1*rho1 - 2.0*T1)/(2.0*m1*m1*m1),A_MIN) + (mu/pow(lb[0] - m1, 2));
+        A[i+2][problem.km[knot-1][41]] = MAX(h[knot]*lambda2/(2.0*m1*m1),A_MIN);
 
-        A[i+3][problem.km[knot-1][54]] = A[i+2][problem.km[knot-1][53]];
-        
-        A[i+4][problem.km[knot-1][55]] = mu / pow(s_m_lb,2);
+        A[i+3][problem.km[knot-1][42]] = A[i+2][problem.km[knot-1][41]];
+        A[i+3][problem.km[knot-1][43]] = (mu/pow(T1 - ub, 2)) + (mu/pow(lb[1] - T1, 2));        
 
-        A[i+5][problem.km[knot-1][56]] = mu / pow(s_T_lb,2);
-
-        A[i+6][problem.km[knot-1][57]] = mu / pow(s_T_ub,2);
     }
     else{
         A[i][i] = MAX((h[knot]*lambda2*(c_A*v1*v1*c_D1*rho_part_h2 + 2.0*m1*g_part_h2))/(4*m1),A_MIN);
@@ -671,16 +553,12 @@ void Middle_Knot_Hessian(double **A, double *z, double *h, double *lambda,
 
         A[i+2][i] = A[i][i+2];
         A[i+2][i+1] = A[i+1][i+2];
-        A[i+2][i+2] = MAX(h[knot]*lambda2*(c_A*v1*v1*c_D1*rho1 - 2.0*T1)/(2.0*m1*m1*m1),A_MIN);
+        A[i+2][i+2] = MAX(h[knot]*lambda2*(c_A*v1*v1*c_D1*rho1 - 2.0*T1)/(2.0*m1*m1*m1),A_MIN) + (mu/pow(lb[0] - m1, 2));
         A[i+2][i+3] = MAX(h[knot]*lambda2/(2.0*m1*m1),A_MIN);
 
         A[i+3][i+2] = A[i+2][i+3];
-        
-        A[i+4][i+4] = mu / pow(s_m_lb,2);
+        A[i+3][i+3] = (mu/pow(T1 - ub, 2)) + (mu/pow(lb[1] - T1, 2));        
 
-        A[i+5][i+5] = mu / pow(s_T_lb,2);
-
-        A[i+6][i+6] = mu / pow(s_T_ub,2);
     }
 }
 
@@ -703,32 +581,26 @@ void End_Knot_Hessian(double **A, double *z, double *h, double *lambda,
     const double v1 = z[offset_z+1];
     const double m1 = z[offset_z+2];
     const double T1 = z[offset_z+3];
-    const double s_m_lb = z[offset_z+4];
-    const double s_T_lb = z[offset_z+5];
-    const double s_T_ub = z[offset_z+6];
+
     const double lambda2 = lambda[offset_c+1];
 
     if (sparse){
-        A[i][problem.ke[12]] = MAX(2.0 + (h[knot]*lambda2*(c_A*v1*v1*c_D1*rho_part_h2 + 2.0*m1*g_part_h2))/(4*m1),A_MIN);
-        A[i][problem.ke[13]] = MAX((c_A*h[knot]*lambda2*v1*(v1*c_D_part_s + 2.0*c_D1)*rho_part_h)/(4*m1),A_MIN);
-        A[i][problem.ke[14]] = MAX((-c_A*h[knot]*lambda2*v1*v1*c_D1*rho_part_h)/(4*m1*m1),A_MIN);
+        A[i][problem.ke[0]] = MAX(2.0 + (h[knot]*lambda2*(c_A*v1*v1*c_D1*rho_part_h2 + 2.0*m1*g_part_h2))/(4*m1),A_MIN);
+        A[i][problem.ke[1]] = MAX((c_A*h[knot]*lambda2*v1*(v1*c_D_part_s + 2.0*c_D1)*rho_part_h)/(4*m1),A_MIN);
+        A[i][problem.ke[2]] = MAX((-c_A*h[knot]*lambda2*v1*v1*c_D1*rho_part_h)/(4*m1*m1),A_MIN);
         
-        A[i+1][problem.ke[15]] = A[i][problem.ke[13]];
-        A[i+1][problem.ke[16]] = MAX(c_A*h[knot]*lambda2*(v1*v1*c_D_part_s2 + 4.0*v1*c_D_part_s + 2.0*c_D1)*rho1/(4.0*m1),A_MIN);
-        A[i+1][problem.ke[17]] = MAX(-c_A*h[knot]*lambda2*v1*(v1*c_D_part_s + 2.0*c_D1)*rho1/(4.0*m1*m1),A_MIN);
+        A[i+1][problem.ke[3]] = A[i][problem.ke[1]];
+        A[i+1][problem.ke[4]] = MAX(c_A*h[knot]*lambda2*(v1*v1*c_D_part_s2 + 4.0*v1*c_D_part_s + 2.0*c_D1)*rho1/(4.0*m1),A_MIN);
+        A[i+1][problem.ke[5]] = MAX(-c_A*h[knot]*lambda2*v1*(v1*c_D_part_s + 2.0*c_D1)*rho1/(4.0*m1*m1),A_MIN);
 
-        A[i+2][problem.ke[18]] = A[i][problem.ke[14]];
-        A[i+2][problem.ke[19]] = A[i+1][problem.ke[17]];
-        A[i+2][problem.ke[20]] = MAX(h[knot]*lambda2*(c_A*v1*v1*c_D1*rho1 - 2.0*T1)/(2.0*m1*m1*m1),A_MIN);
-        A[i+2][problem.ke[21]] = MAX(h[knot]*lambda2/(2.0*m1*m1),A_MIN);
+        A[i+2][problem.ke[6]] = A[i][problem.ke[2]];
+        A[i+2][problem.ke[7]] = A[i+1][problem.ke[5]];
+        A[i+2][problem.ke[8]] = MAX(h[knot]*lambda2*(c_A*v1*v1*c_D1*rho1 - 2.0*T1)/(2.0*m1*m1*m1),A_MIN) + (mu/pow(lb[0] - m1, 2));
+        A[i+2][problem.ke[9]] = MAX(h[knot]*lambda2/(2.0*m1*m1),A_MIN);
 
-        A[i+3][problem.ke[22]] = A[i+2][problem.ke[21]];
-        
-        A[i+4][problem.ke[23]] = mu / pow(s_m_lb,2);
+        A[i+3][problem.ke[10]] = A[i+2][problem.ke[9]];
+        A[i+3][problem.ke[11]] = (mu/pow(T1 - ub, 2)) + (mu/pow(lb[1] - T1, 2));
 
-        A[i+5][problem.ke[24]] = mu / pow(s_T_lb,2);
-
-        A[i+6][problem.ke[25]] = mu / pow(s_T_ub,2);
     }
     else{
         A[i][i] = MAX(2.0 + (h[knot]*lambda2*(c_A*v1*v1*c_D1*rho_part_h2 + 2.0*m1*g_part_h2))/(4*m1),A_MIN);
@@ -741,16 +613,12 @@ void End_Knot_Hessian(double **A, double *z, double *h, double *lambda,
 
         A[i+2][i] = A[i][i+2];
         A[i+2][i+1] = A[i+1][i+2];
-        A[i+2][i+2] = MAX(h[knot]*lambda2*(c_A*v1*v1*c_D1*rho1 - 2.0*T1)/(2.0*m1*m1*m1),A_MIN);
+        A[i+2][i+2] = MAX(h[knot]*lambda2*(c_A*v1*v1*c_D1*rho1 - 2.0*T1)/(2.0*m1*m1*m1),A_MIN) + (mu/pow(lb[0] - m1, 2));
         A[i+2][i+3] = MAX(h[knot]*lambda2/(2.0*m1*m1),A_MIN);
 
         A[i+3][i+2] = A[i+2][i+3];
+        A[i+3][i+3] = (mu/pow(T1 - ub, 2)) + (mu/pow(lb[1] - T1, 2));     
         
-        A[i+4][i+4] = mu / pow(s_m_lb,2);
-
-        A[i+5][i+5] = mu / pow(s_T_lb,2);
-
-        A[i+6][i+6] = mu / pow(s_T_ub,2);
     }
 
 }
@@ -887,30 +755,22 @@ void First_Knot_Eq(double *b, double *z, double *h, int knot, int offset_z, int 
     // v1 = z[offset_z+1]
     // m1 = z[offset_z+2]
     // T1 = z[offset_z+3]
-    // s_m_lb = z[offset_z+4]
-    // s_T_lb = z[offset_z+5]
-    // s_T_ub = z[offset_z+6]
-    // h2 = z[offset_z+7]
-    // v2 = z[offset_z+8]
-    // m2 = z[offset_z+9]
-    // T2 = z[offset_z+10]
+    // h2 = z[offset_z+4]
+    // v2 = z[offset_z+5]
+    // m2 = z[offset_z+6]
+    // T2 = z[offset_z+7]
 
     // Defects
     b[N_DECISION_VARIABLES+offset_c] = 
-        0.5*h[knot]*(problem.knot_params.dx[knot][0] + problem.knot_params.dx[knot+1][0]) + z[offset_z] - z[offset_z+7];
+        0.5*h[knot]*(problem.knot_params.dx[knot][0] + problem.knot_params.dx[knot+1][0]) + z[offset_z] - z[offset_z+4];
     b[N_DECISION_VARIABLES+offset_c+1] = 
-        0.5*h[knot]*(problem.knot_params.dx[knot][1] + problem.knot_params.dx[knot+1][1]) + z[offset_z+1] - z[offset_z+8];
+        0.5*h[knot]*(problem.knot_params.dx[knot][1] + problem.knot_params.dx[knot+1][1]) + z[offset_z+1] - z[offset_z+5];
     b[N_DECISION_VARIABLES+offset_c+2] = 
-        0.5*h[knot]*(problem.knot_params.dx[knot][2] + problem.knot_params.dx[knot+1][2]) + z[offset_z+2] - z[offset_z+9];
-    // Lower bounds
-    b[N_DECISION_VARIABLES+offset_c+3] = z[offset_z+2] - lb[0] - z[offset_z+4];
-    b[N_DECISION_VARIABLES+offset_c+4] = z[offset_z+3] - lb[1] - z[offset_z+5];
-    // Upper bounds
-    b[N_DECISION_VARIABLES+offset_c+5] = ub - z[offset_z+3] - z[offset_z+6];
+        0.5*h[knot]*(problem.knot_params.dx[knot][2] + problem.knot_params.dx[knot+1][2]) + z[offset_z+2] - z[offset_z+6];
     // Initial conditions
-    b[N_DECISION_VARIABLES+offset_c+6] = z[offset_z] - ic[0];
-    b[N_DECISION_VARIABLES+offset_c+7] = z[offset_z+1] - ic[1];
-    b[N_DECISION_VARIABLES+offset_c+8] = z[offset_z+2] - ic[2];
+    b[N_DECISION_VARIABLES+offset_c+3] = z[offset_z] - ic[0];
+    b[N_DECISION_VARIABLES+offset_c+4] = z[offset_z+1] - ic[1];
+    b[N_DECISION_VARIABLES+offset_c+5] = z[offset_z+2] - ic[2];
 }
 
 void Middle_Knot_Eq(double *b, double *z, double *h, int knot, int offset_z, int offset_c){
@@ -918,43 +778,23 @@ void Middle_Knot_Eq(double *b, double *z, double *h, int knot, int offset_z, int
     // v1 = z[offset_z+1]
     // m1 = z[offset_z+2]
     // T1 = z[offset_z+3]
-    // s_m_lb = z[offset_z+4]
-    // s_T_lb = z[offset_z+5]
-    // s_T_ub = z[offset_z+6]
-    // h2 = z[offset_z+7]
-    // v2 = z[offset_z+8]
-    // m2 = z[offset_z+9]
-    // T2 = z[offset_z+10]
+    // h2 = z[offset_z+4]
+    // v2 = z[offset_z+5]
+    // m2 = z[offset_z+6]
+    // T2 = z[offset_z+7]
 
     // Defects
     b[N_DECISION_VARIABLES+offset_c] = 
-        0.5*h[knot]*(problem.knot_params.dx[knot][0] + problem.knot_params.dx[knot+1][0]) + z[offset_z] - z[offset_z+7];
+        0.5*h[knot]*(problem.knot_params.dx[knot][0] + problem.knot_params.dx[knot+1][0]) + z[offset_z] - z[offset_z+4];
     b[N_DECISION_VARIABLES+offset_c+1] = 
-        0.5*h[knot]*(problem.knot_params.dx[knot][1] + problem.knot_params.dx[knot+1][1]) + z[offset_z+1] - z[offset_z+8];
+        0.5*h[knot]*(problem.knot_params.dx[knot][1] + problem.knot_params.dx[knot+1][1]) + z[offset_z+1] - z[offset_z+5];
     b[N_DECISION_VARIABLES+offset_c+2] = 
-        0.5*h[knot]*(problem.knot_params.dx[knot][2] + problem.knot_params.dx[knot+1][2]) + z[offset_z+2] - z[offset_z+9];
-    // Lower bounds
-    b[N_DECISION_VARIABLES+offset_c+3] = z[offset_z+2] - lb[0] - z[offset_z+4];
-    b[N_DECISION_VARIABLES+offset_c+4] = z[offset_z+3] - lb[1] - z[offset_z+5];
-    // Upper bounds
-    b[N_DECISION_VARIABLES+offset_c+5] = ub - z[offset_z+3] - z[offset_z+6];
+        0.5*h[knot]*(problem.knot_params.dx[knot][2] + problem.knot_params.dx[knot+1][2]) + z[offset_z+2] - z[offset_z+6];
 
 }
 
 void End_Knot_Eq(double *b, double *z, int knot, int offset_z, int offset_c){
-    // h1 = z[offset_z]
-    // v1 = z[offset_z+1]
-    // m1 = z[offset_z+2]
-    // T1 = z[offset_z+3]
-    // s_m_lb = z[offset_z+4]
-    // s_T_lb = z[offset_z+5]
-    // s_T_ub = z[offset_z+6]
 
-    // Lower bounds
-    b[N_DECISION_VARIABLES+offset_c] = z[offset_z+2] - lb[0] - z[offset_z+4];
-    b[N_DECISION_VARIABLES+offset_c+1] = z[offset_z+3] - lb[1] - z[offset_z+5];
-    // Upper bounds
-    b[N_DECISION_VARIABLES+offset_c+2] = ub - z[offset_z+3] - z[offset_z+6];
 }
 
 void Load_Equalities(double *b, double *z, double *h){
@@ -981,22 +821,19 @@ void Load_Equalities(double *b, double *z, double *h){
 }
 
 void First_Knot_Grad(double *b, double *z, int offset){
-    b[offset+4] = mu / z[offset+4];
-    b[offset+5] = mu / z[offset+5];
-    b[offset+6] = mu / z[offset+6];
+    b[offset+2] = -mu/(lb[0] - z[offset+2]);
+    b[offset+3] = -mu/(lb[1] - z[offset+3]) + mu/(z[offset+3] - ub);
 }
 
 void Middle_Knot_Grad(double *b, double *z, int offset){
-    b[offset+4] = mu / z[offset+4];
-    b[offset+5] = mu / z[offset+5];
-    b[offset+6] = mu / z[offset+6];
+    b[offset+2] = -mu/(lb[0] - z[offset+2]);
+    b[offset+3] = -mu/(lb[1] - z[offset+3]) + mu/(z[offset+3] - ub);
 }
 
 void End_Knot_Grad(double *b, double *z, int offset){
     b[offset] = 2.0*(xd - z[offset]);
-    b[offset+4] = mu / z[offset+4];
-    b[offset+5] = mu / z[offset+5];
-    b[offset+6] = mu / z[offset+6];
+    b[offset+2] = -mu/(lb[0] - z[offset+2]);
+    b[offset+3] = -mu/(lb[1] - z[offset+3]) + mu/(z[offset+3] - ub);
 }
 
 void Load_Gradient(double *b, double *z){
@@ -1021,43 +858,31 @@ void Load_First_Knot_Columns(int offset_z, int offset_c, int **Checklist_S, bool
     int c = 0;
     const int rows[FIRST_KNOT_CONTRIBUTION] = {
         //jacobian
-        j, j, j, j, k, k+1, k+7, k+8,
-        j+1, j+1, j+1, j+1, j+1, j+1, j+1, j+1, k, k+1, k+2, k+3, k+7, k+8, k+9, k+10,
-        j+2, j+2, j+2, j+2, k+2, k+3, k+9, k+10,
-        j+3, j+3, k+2, k+4,
-        j+4, j+4, k+3, k+5,
-        j+5, j+5, k+3, k+6,
-        j+6, k,
-        j+7, k+1,
-        j+8, k+2,
+        j, j, j, j, k, k+1, k+4, k+5,
+        j+1, j+1, j+1, j+1, j+1, j+1, j+1, j+1, k, k+1, k+2, k+3, k+4, k+5, k+6, k+7,
+        j+2, j+2, j+2, j+2, k+2, k+3, k+6, k+7,
+        j+3, k,
+        j+4, k+1,
+        j+5, k+2,
         // hessian
         k, k, k,
         k+1, k+1, k+1,
         k+2, k+2, k+2, k+2,
-        k+3,
-        k+4,
-        k+5,
-        k+6
+        k+3, k+3
     };
     const int cols[FIRST_KNOT_CONTRIBUTION] = {
         //jacobian
-        k, k+1, k+7, k+8, j, j, j, j,
-        k, k+1, k+2, k+3, k+7, k+8, k+9, k+10, j+1, j+1, j+1, j+1, j+1, j+1, j+1, j+1,
-        k+2, k+3, k+9, k+10, j+2, j+2, j+2, j+2,
-        k+2, k+4, j+3, j+3,
-        k+3, k+5, j+4, j+4,
-        k+3, k+6, j+5, j+5,
-        k, j+6,
-        k+1, j+7,
-        k+2, j+8,
+        k, k+1, k+4, k+5, j, j, j, j,
+        k, k+1, k+2, k+3, k+4, k+5, k+6, k+7, j+1, j+1, j+1, j+1, j+1, j+1, j+1, j+1,
+        k+2, k+3, k+6, k+7, j+2, j+2, j+2, j+2,
+        k, j+3,
+        k+1, j+4,
+        k+2, j+5,
         // hessian
         k, k+1, k+2,
         k, k+1, k+2,
         k, k+1, k+2, k+3,
-        k+2,
-        k+4,
-        k+5,
-        k+6
+        k+2, k+3
     };
     for (c = 0; c < FIRST_KNOT_CONTRIBUTION; c++)
         if (sparse)
@@ -1074,37 +899,25 @@ void Load_Middle_Knot_Columns(int knot, int offset_z, int offset_c, int **Checkl
     int c = 0;
     const int rows[MIDDLE_KNOT_CONTRIBUTION] = {
         //jacobian
-        j, j, j, j, k, k+1, k+7, k+8,
-        j+1, j+1, j+1, j+1, j+1, j+1, j+1, j+1, k, k+1, k+2, k+3, k+7, k+8, k+9, k+10,
-        j+2, j+2, j+2, j+2, k+2, k+3, k+9, k+10,
-        j+3, j+3, k+2, k+4,
-        j+4, j+4, k+3, k+5,
-        j+5, j+5, k+3, k+6,
+        j, j, j, j, k, k+1, k+4, k+5,
+        j+1, j+1, j+1, j+1, j+1, j+1, j+1, j+1, k, k+1, k+2, k+3, k+4, k+5, k+6, k+7,
+        j+2, j+2, j+2, j+2, k+2, k+3, k+6, k+7,
         // hessian
         k, k, k,
         k+1, k+1, k+1,
         k+2, k+2, k+2, k+2,
-        k+3,
-        k+4,
-        k+5,
-        k+6
+        k+3, k+3
     };
     const int cols[MIDDLE_KNOT_CONTRIBUTION] = {
         //jacobian
-        k, k+1, k+7, k+8, j, j, j, j,
-        k, k+1, k+2, k+3, k+7, k+8, k+9, k+10, j+1, j+1, j+1, j+1, j+1, j+1, j+1, j+1,
-        k+2, k+3, k+9, k+10, j+2, j+2, j+2, j+2,
-        k+2, k+4, j+3, j+3,
-        k+3, k+5, j+4, j+4,
-        k+3, k+6, j+5, j+5,
+        k, k+1, k+4, k+5, j, j, j, j,
+        k, k+1, k+2, k+3, k+4, k+5, k+6, k+7, j+1, j+1, j+1, j+1, j+1, j+1, j+1, j+1,
+        k+2, k+3, k+6, k+7, j+2, j+2, j+2, j+2,
         // hessian
         k, k+1, k+2,
         k, k+1, k+2,
         k, k+1, k+2, k+3,
-        k+2,
-        k+4,
-        k+5,
-        k+6
+        k+2, k+3
     };
     for (c = 0; c < MIDDLE_KNOT_CONTRIBUTION; c++)
         if (sparse)
@@ -1115,38 +928,24 @@ void Load_Middle_Knot_Columns(int knot, int offset_z, int offset_c, int **Checkl
 }
 
 void Load_End_Knot_Columns(int offset_z, int offset_c, int **Checklist_S, bool sparse){
-    int i = N_DECISION_VARIABLES;
-    int j = i + offset_c;
     int k = offset_z;
     int c = 0;
 
     const int rows[END_KNOT_CONTRIBUTION] = {
         //jacobian
-        j, j, k+2, k+4,
-        j+1, j+1, k+3, k+5,
-        j+2, j+2, k+3, k+6,
         // hessian
         k, k, k,
         k+1, k+1, k+1,
         k+2, k+2, k+2, k+2,
-        k+3,
-        k+4,
-        k+5,
-        k+6
+        k+3, k+3
     };
     const int cols[END_KNOT_CONTRIBUTION] = {
         // jacobian
-        k+2, k+4, j, j,
-        k+3, k+5, j+1, j+1,
-        k+3, k+6, j+2, j+2,
         // hessian
         k, k+1, k+2,
         k, k+1, k+2,
         k, k+1, k+2, k+3,
-        k+2,
-        k+4,
-        k+5,
-        k+6
+        k+2, k+3
     };
 
     for (c = 0; c < END_KNOT_CONTRIBUTION; c++)

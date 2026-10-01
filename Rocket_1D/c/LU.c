@@ -60,16 +60,15 @@ int Get_Pivots_Extents(double **A, int N, double Tol, int *P, int *P_max,
         for (j = i + 1; j < N; j++) {
             if (A[j][i] != 0.0){
                 row_counter++;
-                if (A[i][i] == 0.0)
-                    printf("HERE");
-                A[j][i] /= A[i][i]; // one scratch for here
+                A[j][i] /= A[i][i]; // one scratch for here, need this
                 if (Checklist_S[j][i] == 0)
                     Checklist_S[j][i] = 2;
 
                 col_counter = 0;
                 Col_nz_L[j]++;
+                // We want to maximize the number of zeros in row i to the right of the diagonal
                 for (k = i + 1; k < N; k++){
-                    A[j][k] -= A[j][i] * A[i][k]; // multiple scratches for here
+                    A[j][k] -= A[j][i] * A[i][k]; // multiple scratches for here, want to minimize this
                     if (A[i][k] != 0.0){
                         col_counter++;
                         if (Checklist_S[j][k] == 0)
