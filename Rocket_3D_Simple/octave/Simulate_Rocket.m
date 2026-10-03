@@ -106,10 +106,6 @@ function [dx, w] = get_dx(z_knot, knot_params)
   Clz = z_knot(12);
 
   q = [q0 q1 q2 q3];
-##  q0 = q0 / norm(q);
-##  q1 = q1 / norm(q);
-##  q2 = q2 / norm(q);
-##  q3 = q3 / norm(q);
 
   D = 0.5*knot_params.rho*A*knot_params.c_D*s*s;
   az = 0.5*knot_params.rho*A*Clz*s*s/knot_params.m;
@@ -137,17 +133,11 @@ for i = 1:O.N_knots
   O.z(knot_start+10) = 0.0;
   O.z(knot_start+11) = -0.1;
   if i > 1
-##    O.z(knot_start:knot_start+7) = z_knot(1:8) + dx'*(O.t(i) - O.t(i-1));
     O.z(knot_start:knot_start+3) = z_knot(1:4) + dx(1:4)'*(O.t(i) - O.t(i-1));
     theta = norm(w)*(O.t(i) - O.t(i-1));
     delta_q = [cos(theta/2);0;(w(1)/norm(w))*sin(theta/2);(w(2)/norm(w))*sin(theta/2)];
-    q0 = z_knot(5);
-    q1 = z_knot(6);
-    q2 = z_knot(7);
-    q3 = z_knot(8);
-    q_new = [q0 -q1 -q2 -q3; q1 q0 -q3 q2; q2 q3 q0 -q1; q3 -q2 q1 q0]*delta_q;
+    q_new = quaternion_multiply(z_knot(5:8), delta_q, 'right');
     O.z(knot_start+4:knot_start+7) = q_new;
-##    O.z(knot_start+4:knot_start+7) = O.z(knot_start+4:knot_start+7)./norm(O.z(knot_start+4:knot_start+7));
   end
   z_knot = O.z(knot_start:knot_end);
   params(i) = get_knot_params(z_knot, O.t(i));

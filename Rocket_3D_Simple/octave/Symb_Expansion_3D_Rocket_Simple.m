@@ -89,22 +89,34 @@ function c = get_constraints_first_knot(states, inputs, slack, lbs, ubs, ic)
   Cly2 = inputs(2,1);
   Clz2 = inputs(2,2);
 
-  [dx1, ~, ~, w] = get_dx1(pn1, pe1, pd1, s1, q01, q11, q21, q31, wy1, wz1, Cly1, Clz1);
+  [dx1, ~, ~, w_guess] = get_dx1(pn1, pe1, pd1, s1, q01, q11, q21, q31, wy1, wz1, Cly1, Clz1);
   dx1 = simplify(dx1);
   dx2 = simplify(get_dx2(pn2, pe2, pd2, s2, q02, q12, q22, q32, wy2, wz2, Cly2, Clz2));
+
+  wy = 0.5*(wy1 + wy2);
+  wz = 0.5*(wz1 + wz2);
+  w = [wy wz];
+
+  theta = norm(w)*h;
+
+  delta_q = [cos(theta/2);0;(w(1)/norm(w))*sin(theta/2);(w(2)/norm(w))*sin(theta/2)];
+
+  constraint = [q02;q12;q22;q32] - [q01 -q11 -q21 -q31; q11 q01 -q31 q21; q21 q31 q01 -q11; q31 -q21 q11 q01]*delta_q;
+
+
   c = [...
     % the trapezoidal defect constraints for the knot
     pn2 - pn1 - 0.5*h*(dx1(1) + dx2(1));...
     pe2 - pe1 - 0.5*h*(dx1(2) + dx2(2));...
     pd2 - pd1 - 0.5*h*(dx1(3) + dx2(3));...
     s2  - s1  - 0.5*h*(dx1(4) + dx2(4));...
-    q02 - q01 - 0.5*h*(dx1(5) + dx2(5));...
-    q12 - q11 - 0.5*h*(dx1(6) + dx2(6));...
-    q22 - q21 - 0.5*h*(dx1(7) + dx2(7));...
-    q32 - q31 - 0.5*h*(dx1(8) + dx2(8));...
+    constraint(1);...
+    constraint(2);...
+    constraint(3);...
+    constraint(4);...
     % the angular rate defect constraints for the knot
-    wy1 - w(1);...
-    wz1 - w(2);...
+    wy1 - w_guess(1);...
+    wz1 - w_guess(2);...
     % the initial condition constraints for the knot
     pn_ic - pn1;...
     pe_ic - pe1;...
@@ -195,7 +207,7 @@ function lagrangian = get_lagrangian_first_knot(states, inputs, slack, lbs, ubs,
   lambda = [lambda1 lambda2 lambda3 lambda4 lambda5 lambda6 lambda7...
             lambda8 lambda9 lambda10 lambda11 lambda12 lambda13 lambda14...
             lambda15 lambda16 lambda17 lambda18];
-##  cost = -mu*(log(slack(1)) + log(slack(2)) + log(slack(3)) + log(slack(4)) + log(slack(5)));
+
   cost = -mu*(log(inputs(1,1) - lbs(1)) +...
                   log(inputs(1,2) - lbs(2)) +...
                   log(ubs(2) - inputs(1,1)) +...
@@ -240,14 +252,14 @@ xd = [xd1 xd2 xd3];
 z = [pn1 pe1 pd1 s1 q01 q11 q21 q31 wy1 wz1 Cly1 Clz1 pn2 pe2 pd2 s2 q02 q12 q22 q32 wy2 wz2 Cly2 Clz2];
 
 ##cf = simplify(get_constraints_first_knot(states, inputs, slack, lbs, ubs, ic));
-##
+
 ##cm = simplify(get_constraints_middle_knot(states, inputs, slack, lbs, ubs));
 ##
 ##ce = simplify(get_constraints_end_knot(states, inputs, slack, lbs, ubs));
 
-Lf = simplify(get_lagrangian_first_knot(states, inputs, slack, lbs, ubs, ic));
+Lf = get_lagrangian_first_knot(states, inputs, slack, lbs, ubs, ic);
 
-Lm = simplify(get_lagrangian_middle_knot(states, inputs, slack, lbs, ubs));
+##Lm = simplify(get_lagrangian_middle_knot(states, inputs, slack, lbs, ubs));
 
 clc
 ##disp(cf)
@@ -287,6 +299,9 @@ fprintf('\n\n\n')
 for i = 1:length(z)
   dif1 = simplify(diff(Lf, z(i)));
   for j = 1:length(z)
+    if i >= 9 && i <= 10 && j >= 9 && j <= 10
+      continue;
+    end
     blocklf = simplify(diff(dif1, z(j)));
     if blocklf ~= 0
       if i > j
@@ -298,17 +313,17 @@ for i = 1:length(z)
   end
 end
 
-fprintf('\n\n\n')
-for i = 1:length(z)
-  dif1 = simplify(diff(Lm, z(i)));
-  for j = 1:length(z)
-    blocklf = simplify(diff(dif1, z(j)));
-    if blocklf ~= 0
-      if i > j
-        fprintf('hes_block(%d,%d) = hes_block(%d,%d);\n',i,j,j,i);
-      else
-        fprintf('hes_block(%d,%d) = %s;\n',i,j,char(blocklf));
-      end
-    end
-  end
-end
+##fprintf('\n\n\n')
+##for i = 1:length(z)
+##  dif1 = simplify(diff(Lm, z(i)));
+##  for j = 1:length(z)
+##    blocklf = simplify(diff(dif1, z(j)));
+##    if blocklf ~= 0
+##      if i > j
+##        fprintf('hes_block(%d,%d) = hes_block(%d,%d);\n',i,j,j,i);
+##      else
+##        fprintf('hes_block(%d,%d) = %s;\n',i,j,char(blocklf));
+##      end
+##    end
+##  end
+##end

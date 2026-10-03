@@ -18,22 +18,16 @@ hessian = [];
 % 10 - wz
 % 11 - Cly
 % 12 - Clz
-% 13 - s_Cly_lb
-% 14 - s_Clz_lb
-% 15 - s_pd_ub
-% 16 - s_Cly_ub
-% 17 - s_Clz_ub
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%                       Evaluate cost                    %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-  mu = 1.0e-2;
-  mu_q = 1.0e1;
+  mu = 1.0e-3;
+  mu_q = 1.0e-2;
   function contribution = get_first_knot_cost(z_knot, lb, ub)
 
     contribution = -mu*(log(z_knot(11) - lb(1)) +...
                         log(z_knot(12) - lb(2)) +...
-                        log(ub(1) - z_knot(3)) +...
                         log(ub(2) - z_knot(11)) +...
                         log(ub(3) - z_knot(12)));
   end
@@ -83,7 +77,6 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function grad_vec = get_first_knot_grad(z_knot, lb, ub)
   grad_vec = zeros(length(z_knot), 1);
-  grad_vec(3) = -mu/(z_knot(3) - ub(1));
   grad_vec(11) = (-mu/(z_knot(11) - ub(2))) + (mu/(lb(1) - z_knot(11)));
   grad_vec(12) = (-mu/(z_knot(12) - ub(3))) + (mu/(lb(2) - z_knot(12)));
 
@@ -264,6 +257,17 @@ function eq_vec = get_first_knot_eq(z_knot, t_knot, knot_params,...
   h = t_next - t_knot;
   dx1 = get_dx(z_knot(1:12), knot_params);
   dx2 = get_dx(z_next(1:12), next_params);
+  wy = 0.5*(z_knot(9) + z_next(9));
+  wz = 0.5*(z_knot(10) + z_next(10));
+  w = [wy wz];
+
+  theta = norm(w)*h;
+  if norm(w) < 1.0e-5
+    delta_q = zeros(4,1);
+  else
+    delta_q = [cos(theta/2);0;(w(1)/norm(w))*sin(theta/2);(w(2)/norm(w))*sin(theta/2)];
+  end
+  constraint = z_next(5:8) - quaternion_multiply(z_knot(5:8), delta_q, 'left');
 
   eq_vec = [...
             % the trapezoidal constraints for the knot
@@ -271,10 +275,10 @@ function eq_vec = get_first_knot_eq(z_knot, t_knot, knot_params,...
             z_next(2) - z_knot(2) - 0.5*h*(dx1(2) + dx2(2));...
             z_next(3) - z_knot(3) - 0.5*h*(dx1(3) + dx2(3));...
             z_next(4) - z_knot(4) - 0.5*h*(dx1(4) + dx2(4));...
-            z_next(5) - z_knot(5) - 0.5*h*(dx1(5) + dx2(5));...
-            z_next(6) - z_knot(6) - 0.5*h*(dx1(6) + dx2(6));...
-            z_next(7) - z_knot(7) - 0.5*h*(dx1(7) + dx2(7));...
-            z_next(8) - z_knot(8) - 0.5*h*(dx1(8) + dx2(8));...
+            constraint(1);...
+            constraint(2);...
+            constraint(3);...
+            constraint(4);...
             % The angular rate constraints
             z_knot(9) - dx1(9);...
             z_knot(10) - dx1(10);...
@@ -296,16 +300,29 @@ function eq_vec = get_middle_knot_eq(z_knot, t_knot, knot_params,...
   dx1 = get_dx(z_knot(1:12), knot_params);
   dx2 = get_dx(z_next(1:12), next_params);
 
+  wy = 0.5*(z_knot(9) + z_next(9));
+  wz = 0.5*(z_knot(10) + z_next(10));
+  w = [wy wz];
+
+  theta = norm(w)*h;
+  if norm(w) < 1.0e-5
+    delta_q = zeros(4,1);
+  else
+    delta_q = [cos(theta/2);0;(w(1)/norm(w))*sin(theta/2);(w(2)/norm(w))*sin(theta/2)];
+  end
+
+  constraint = z_next(5:8) - quaternion_multiply(z_knot(5:8), delta_q, 'left');
+
   eq_vec = [...
             % the trapezoidal constraints for the knot
             z_next(1) - z_knot(1) - 0.5*h*(dx1(1) + dx2(1));...
             z_next(2) - z_knot(2) - 0.5*h*(dx1(2) + dx2(2));...
             z_next(3) - z_knot(3) - 0.5*h*(dx1(3) + dx2(3));...
             z_next(4) - z_knot(4) - 0.5*h*(dx1(4) + dx2(4));...
-            z_next(5) - z_knot(5) - 0.5*h*(dx1(5) + dx2(5));...
-            z_next(6) - z_knot(6) - 0.5*h*(dx1(6) + dx2(6));...
-            z_next(7) - z_knot(7) - 0.5*h*(dx1(7) + dx2(7));...
-            z_next(8) - z_knot(8) - 0.5*h*(dx1(8) + dx2(8));...
+            constraint(1);...
+            constraint(2);...
+            constraint(3);...
+            constraint(4);...
             % The angular rate constraints
             z_knot(9) - dx1(9);...
             z_knot(10) - dx1(10)];
@@ -444,46 +461,61 @@ function jac_block = get_first_knot_jac(z_knot, t_knot, knot_params, z_next, t_n
   jac_block(4,19) = g*h*q02;
   jac_block(4,20) = -g*h*q12;
 
-  jac_block(5,5) = -1;
-  jac_block(5,7) = h*wy1/4;
-  jac_block(5,8) = h*wz1/4;
-  jac_block(5,9) = h*q21/4;
-  jac_block(5,10) = h*q31/4;
+  c2 = (wy1 + wy2);
+  c3 = (wz1 + wz2);
+  c1 = c2^2 + c3^2;
+  c4 = sin(h*sqrt(c1)/4);
+  c5 = cos(h*sqrt(c1)/4);
+  c6 = (c1)^(5/2);
+
+  jac_block(5,5) = -c5;
+  if c1 > 1.0e-5
+    jac_block(5,7) = c2*c4/sqrt(c1);
+    jac_block(5,8) = c3*c4/sqrt(c1);
+    jac_block(5,9) = (-c2*(c1)*(q21*c2*c4 + q31*c3*c4 + (-q01*c5 + q02)*sqrt(c1)) + (c2^2 +c3^2)^(3/2)*(h*q21*c2^2*c5 + h*q31*c2*c3*c5 - 4*c2*(q01*cos(h*sqrt(c2^2 + c3^2)/4) - q02) + (h*q01*c2 + 4*q21)*sqrt(c1)*c4)/4)/c6;
+    jac_block(5,10) = (-c3*(c1)*(q21*c2*c4 + q31*c3*c4 + (-q01*c5 + q02)*sqrt(c1)) + (c1)^(3/2)*(h*q21*c2*c3*c5 + h*q31*c3^2*c5 - 4*c3*(q01*c5 - q02) + (h*q01*c3 + 4*q31)*sqrt(c1)*c4)/4)/c6;
+  end
   jac_block(5,17) = 1;
-  jac_block(5,19) = h*wy2/4;
-  jac_block(5,20) = h*wz2/4;
-  jac_block(5,21) = h*q22/4;
-  jac_block(5,22) = h*q32/4;
-  jac_block(6,6) = -1;
-  jac_block(6,7) = -h*wz1/4;
-  jac_block(6,8) = h*wy1/4;
-  jac_block(6,9) = h*q31/4;
-  jac_block(6,10) = -h*q21/4;
+  if c1 > 1.0e-5
+    jac_block(5,21) = (-c2*(c1)*(q21*c2*c4 + q31*c3*c4 + (-q01*c5 + q02)*sqrt(c1)) + (c1)^(3/2)*(h*q21*c2^2*c5 + h*q31*c2*c3*c5 - 4*c2*(q01*c5 - q02) + (h*q01*c2 + 4*q21)*sqrt(c1)*c4)/4)/c6;
+    jac_block(5,22) = (-c3*(c1)*(q21*c2*c4 + q31*c3*c4 + (-q01*c5 + q02)*sqrt(c1)) + (c1)^(3/2)*(h*q21*c2*c3*c5 + h*q31*c3^2*c5 - 4*c3*(q01*c5 - q02) + (h*q01*c3 + 4*q31)*sqrt(c1)*c4)/4)/c6;
+  end
+  jac_block(6,6) = -c5;
+  if c1 > 1.0e-5
+    jac_block(6,7) = -c3*c4/sqrt(c1);
+    jac_block(6,8) = c2*c4/sqrt(c1);
+    jac_block(6,9) = (c2*(c1)*(q21*c3*c4 - q31*c2*c4 + (q11*c5 - q12)*sqrt(c1)) + (c1)^(3/2)*(-h*q21*c2*c3*c5 + h*q31*c2^2*c5 - 4*c2*(q11*c5 - q12) + (h*q11*c2 + 4*q31)*sqrt(c1)*c4)/4)/c6;
+    jac_block(6,10) = (c3*(c1)*(q21*c3*c4 - q31*c2*c4 + (q11*c5 - q12)*sqrt(c1)) + (c1)^(3/2)*(-h*q21*c3^2*c5 + h*q31*c2*c3*c5 - 4*c3*(q11*cos(h*sqrt(c2^2 + c3^2)/4) - q12) + (h*q11*c3 - 4*q21)*sqrt(c1)*c4)/4)/c6;
+  end
   jac_block(6,18) = 1;
-  jac_block(6,19) = -h*wz2/4;
-  jac_block(6,20) = h*wy2/4;
-  jac_block(6,21) = h*q32/4;
-  jac_block(6,22) = -h*q22/4;
-  jac_block(7,5) = -h*wy1/4;
-  jac_block(7,6) = h*wz1/4;
-  jac_block(7,7) = -1;
-  jac_block(7,9) = -h*q01/4;
-  jac_block(7,10) = h*q11/4;
-  jac_block(7,17) = -h*wy2/4;
-  jac_block(7,18) = h*wz2/4;
+  if c1 > 1.0e-5
+    jac_block(6,21) = (c2*(c1)*(q21*c3*c4 - q31*c2*c4 + (q11*c5 - q12)*sqrt(c1)) + (c1)^(3/2)*(-h*q21*c2*c3*c5 + h*q31*c2^2*c5 - 4*c2*(q11*cos(h*sqrt(c2^2 + c3^2)/4) - q12) + (h*q11*c2 + 4*q31)*sqrt(c1)*c4)/4)/c6;
+    jac_block(6,22) = (c3*(c1)*(q21*c3*c4 - q31*c2*c4 + (q11*c5 - q12)*sqrt(c1)) + (c1)^(3/2)*(-h*q21*c3^2*c5 + h*q31*c2*c3*c5 - 4*c3*(q11*cos(h*sqrt(c2^2 + c3^2)/4) - q12) + (h*q11*c3 - 4*q21)*sqrt(c1)*c4)/4)/c6;
+    jac_block(7,5) = -c2*c4/sqrt(c1);
+    jac_block(7,6) = c3*c4/sqrt(c1);
+  end
+  jac_block(7,7) = -c5;
+  if c1 > 1.0e-5
+    jac_block(7,9) = (c2*(c1)*(q01*c2*c4 - q11*c3*c4 + (q21*c5 - q22)*sqrt(c1)) + (c1)^(3/2)*(-h*q01*c2^2*c5 + h*q11*c2*c3*c5 - 4*c2*(q21*c5 - q22) + (h*q21*c2 - 4*q01)*sqrt(c1)*c4)/4)/c6;
+    jac_block(7,10) = (c3*(c1)*(q01*c2*c4 - q11*c3*c4 + (q21*c5 - q22)*sqrt(c1)) + (c1)^(3/2)*(-h*q01*c2*c3*c5 + h*q11*c3^2*c5 - 4*c3*(q21*cos(h*sqrt(c2^2 + c3^2)/4) - q22) + (h*q21*c3 + 4*q11)*sqrt(c1)*c4)/4)/c6;
+  end
   jac_block(7,19) = 1;
-  jac_block(7,21) = -h*q02/4;
-  jac_block(7,22) = h*q12/4;
-  jac_block(8,5) = -h*wz1/4;
-  jac_block(8,6) = -h*wy1/4;
-  jac_block(8,8) = -1;
-  jac_block(8,9) = -h*q11/4;
-  jac_block(8,10) = -h*q01/4;
-  jac_block(8,17) = -h*wz2/4;
-  jac_block(8,18) = -h*wy2/4;
+  if c1 > 1.0e-5
+    jac_block(7,21) = (c2*(c1)*(q01*c2*c4 - q11*c3*c4 + (q21*c5 - q22)*sqrt(c1)) + (c1)^(3/2)*(-h*q01*c2^2*c5 + h*q11*c2*c3*c5 - 4*c2*(q21*cos(h*sqrt(c2^2 + c3^2)/4) - q22) + (h*q21*c2 - 4*q01)*sqrt(c1)*c4)/4)/c6;
+    jac_block(7,22) = (c3*(c1)*(q01*c2*c4 - q11*c3*c4 + (q21*c5 - q22)*sqrt(c1)) + (c1)^(3/2)*(-h*q01*c2*c3*c5 + h*q11*c3^2*c5 - 4*c3*(q21*cos(h*sqrt(c2^2 + c3^2)/4) - q22) + (h*q21*c3 + 4*q11)*sqrt(c1)*c4)/4)/c6;
+    jac_block(8,5) = -c3*c4/sqrt(c1);
+    jac_block(8,6) = -c2*c4/sqrt(c1);
+  end
+  jac_block(8,8) = -c5;
+  if c1 > 1.0e-5
+    jac_block(8,9) = (c2*(c1)*(q01*c3*c4 + q11*c2*c4 + (q31*c5 - q32)*sqrt(c1)) + (c1)^(3/2)*(-h*q01*c2*c3*c5 - h*q11*c2^2*c5 - 4*c2*(q31*c5 - q32) + (h*q31*c2 - 4*q11)*sqrt(c1)*c4)/4)/c6;
+    jac_block(8,10) = (c3*(c1)*(q01*c3*c4 + q11*c2*c4 + (q31*c5 - q32)*sqrt(c1)) + (c1)^(3/2)*(-h*q01*c3^2*c5 - h*q11*c2*c3*c5 - 4*c3*(q31*cos(h*sqrt(c2^2 + c3^2)/4) - q32) + (h*q31*c3 - 4*q01)*sqrt(c1)*c4)/4)/c6;
+  end
   jac_block(8,20) = 1;
-  jac_block(8,21) = -h*q12/4;
-  jac_block(8,22) = -h*q02/4;
+  if c1 > 1.0e-5
+    jac_block(8,21) = (c2*(c1)*(q01*c3*c4 + q11*c2*c4 + (q31*c5 - q32)*sqrt(c1)) + (c1)^(3/2)*(-h*q01*c2*c3*c5 - h*q11*c2^2*c5 - 4*c2*(q31*cos(h*sqrt(c2^2 + c3^2)/4) - q32) + (h*q31*c2 - 4*q11)*sqrt(c1)*c4)/4)/c6;
+    jac_block(8,22) = (c3*(c1)*(q01*c3*c4 + q11*c2*c4 + (q31*c5 - q32)*sqrt(c1)) + (c1)^(3/2)*(-h*q01*c3^2*c5 - h*q11*c2*c3*c5 - 4*c3*(q31*cos(h*sqrt(c2^2 + c3^2)/4) - q32) + (h*q31*c3 - 4*q01)*sqrt(c1)*c4)/4)/c6;
+  end
 
   jac_block(9,3) = A*Clz1*s1*rho_part_h1/(2*m1);
   jac_block(9,4) = (A*Clz1*s1^2*rho1/2 + g*m1*(2*q11^2 + 2*q21^2 - 1))/(m1*s1^2);
@@ -597,46 +629,61 @@ function jac_block = get_middle_knot_jac(z_knot, t_knot, knot_params, z_next, t_
   jac_block(4,19) = g*h*q02;
   jac_block(4,20) = -g*h*q12;
 
-  jac_block(5,5) = -1;
-  jac_block(5,7) = h*wy1/4;
-  jac_block(5,8) = h*wz1/4;
-  jac_block(5,9) = h*q21/4;
-  jac_block(5,10) = h*q31/4;
+  c2 = (wy1 + wy2);
+  c3 = (wz1 + wz2);
+  c1 = c2^2 + c3^2;
+  c4 = sin(h*sqrt(c1)/4);
+  c5 = cos(h*sqrt(c1)/4);
+  c6 = (c1)^(5/2);
+
+  jac_block(5,5) = -c5;
+  if c1 > 1.0e-5
+    jac_block(5,7) = c2*c4/sqrt(c1);
+    jac_block(5,8) = c3*c4/sqrt(c1);
+    jac_block(5,9) = (-c2*(c1)*(q21*c2*c4 + q31*c3*c4 + (-q01*c5 + q02)*sqrt(c1)) + (c2^2 +c3^2)^(3/2)*(h*q21*c2^2*c5 + h*q31*c2*c3*c5 - 4*c2*(q01*cos(h*sqrt(c2^2 + c3^2)/4) - q02) + (h*q01*c2 + 4*q21)*sqrt(c1)*c4)/4)/c6;
+    jac_block(5,10) = (-c3*(c1)*(q21*c2*c4 + q31*c3*c4 + (-q01*c5 + q02)*sqrt(c1)) + (c1)^(3/2)*(h*q21*c2*c3*c5 + h*q31*c3^2*c5 - 4*c3*(q01*c5 - q02) + (h*q01*c3 + 4*q31)*sqrt(c1)*c4)/4)/c6;
+  end
   jac_block(5,17) = 1;
-  jac_block(5,19) = h*wy2/4;
-  jac_block(5,20) = h*wz2/4;
-  jac_block(5,21) = h*q22/4;
-  jac_block(5,22) = h*q32/4;
-  jac_block(6,6) = -1;
-  jac_block(6,7) = -h*wz1/4;
-  jac_block(6,8) = h*wy1/4;
-  jac_block(6,9) = h*q31/4;
-  jac_block(6,10) = -h*q21/4;
+  if c1 > 1.0e-5
+    jac_block(5,21) = (-c2*(c1)*(q21*c2*c4 + q31*c3*c4 + (-q01*c5 + q02)*sqrt(c1)) + (c1)^(3/2)*(h*q21*c2^2*c5 + h*q31*c2*c3*c5 - 4*c2*(q01*c5 - q02) + (h*q01*c2 + 4*q21)*sqrt(c1)*c4)/4)/c6;
+    jac_block(5,22) = (-c3*(c1)*(q21*c2*c4 + q31*c3*c4 + (-q01*c5 + q02)*sqrt(c1)) + (c1)^(3/2)*(h*q21*c2*c3*c5 + h*q31*c3^2*c5 - 4*c3*(q01*c5 - q02) + (h*q01*c3 + 4*q31)*sqrt(c1)*c4)/4)/c6;
+  end
+  jac_block(6,6) = -c5;
+  if c1 > 1.0e-5
+    jac_block(6,7) = -c3*c4/sqrt(c1);
+    jac_block(6,8) = c2*c4/sqrt(c1);
+    jac_block(6,9) = (c2*(c1)*(q21*c3*c4 - q31*c2*c4 + (q11*c5 - q12)*sqrt(c1)) + (c1)^(3/2)*(-h*q21*c2*c3*c5 + h*q31*c2^2*c5 - 4*c2*(q11*c5 - q12) + (h*q11*c2 + 4*q31)*sqrt(c1)*c4)/4)/c6;
+    jac_block(6,10) = (c3*(c1)*(q21*c3*c4 - q31*c2*c4 + (q11*c5 - q12)*sqrt(c1)) + (c1)^(3/2)*(-h*q21*c3^2*c5 + h*q31*c2*c3*c5 - 4*c3*(q11*cos(h*sqrt(c2^2 + c3^2)/4) - q12) + (h*q11*c3 - 4*q21)*sqrt(c1)*c4)/4)/c6;
+  end
   jac_block(6,18) = 1;
-  jac_block(6,19) = -h*wz2/4;
-  jac_block(6,20) = h*wy2/4;
-  jac_block(6,21) = h*q32/4;
-  jac_block(6,22) = -h*q22/4;
-  jac_block(7,5) = -h*wy1/4;
-  jac_block(7,6) = h*wz1/4;
-  jac_block(7,7) = -1;
-  jac_block(7,9) = -h*q01/4;
-  jac_block(7,10) = h*q11/4;
-  jac_block(7,17) = -h*wy2/4;
-  jac_block(7,18) = h*wz2/4;
+  if c1 > 1.0e-5
+    jac_block(6,21) = (c2*(c1)*(q21*c3*c4 - q31*c2*c4 + (q11*c5 - q12)*sqrt(c1)) + (c1)^(3/2)*(-h*q21*c2*c3*c5 + h*q31*c2^2*c5 - 4*c2*(q11*cos(h*sqrt(c2^2 + c3^2)/4) - q12) + (h*q11*c2 + 4*q31)*sqrt(c1)*c4)/4)/c6;
+    jac_block(6,22) = (c3*(c1)*(q21*c3*c4 - q31*c2*c4 + (q11*c5 - q12)*sqrt(c1)) + (c1)^(3/2)*(-h*q21*c3^2*c5 + h*q31*c2*c3*c5 - 4*c3*(q11*cos(h*sqrt(c2^2 + c3^2)/4) - q12) + (h*q11*c3 - 4*q21)*sqrt(c1)*c4)/4)/c6;
+    jac_block(7,5) = -c2*c4/sqrt(c1);
+    jac_block(7,6) = c3*c4/sqrt(c1);
+  end
+  jac_block(7,7) = -c5;
+  if c1 > 1.0e-5
+    jac_block(7,9) = (c2*(c1)*(q01*c2*c4 - q11*c3*c4 + (q21*c5 - q22)*sqrt(c1)) + (c1)^(3/2)*(-h*q01*c2^2*c5 + h*q11*c2*c3*c5 - 4*c2*(q21*c5 - q22) + (h*q21*c2 - 4*q01)*sqrt(c1)*c4)/4)/c6;
+    jac_block(7,10) = (c3*(c1)*(q01*c2*c4 - q11*c3*c4 + (q21*c5 - q22)*sqrt(c1)) + (c1)^(3/2)*(-h*q01*c2*c3*c5 + h*q11*c3^2*c5 - 4*c3*(q21*cos(h*sqrt(c2^2 + c3^2)/4) - q22) + (h*q21*c3 + 4*q11)*sqrt(c1)*c4)/4)/c6;
+  end
   jac_block(7,19) = 1;
-  jac_block(7,21) = -h*q02/4;
-  jac_block(7,22) = h*q12/4;
-  jac_block(8,5) = -h*wz1/4;
-  jac_block(8,6) = -h*wy1/4;
-  jac_block(8,8) = -1;
-  jac_block(8,9) = -h*q11/4;
-  jac_block(8,10) = -h*q01/4;
-  jac_block(8,17) = -h*wz2/4;
-  jac_block(8,18) = -h*wy2/4;
+  if c1 > 1.0e-5
+    jac_block(7,21) = (c2*(c1)*(q01*c2*c4 - q11*c3*c4 + (q21*c5 - q22)*sqrt(c1)) + (c1)^(3/2)*(-h*q01*c2^2*c5 + h*q11*c2*c3*c5 - 4*c2*(q21*cos(h*sqrt(c2^2 + c3^2)/4) - q22) + (h*q21*c2 - 4*q01)*sqrt(c1)*c4)/4)/c6;
+    jac_block(7,22) = (c3*(c1)*(q01*c2*c4 - q11*c3*c4 + (q21*c5 - q22)*sqrt(c1)) + (c1)^(3/2)*(-h*q01*c2*c3*c5 + h*q11*c3^2*c5 - 4*c3*(q21*cos(h*sqrt(c2^2 + c3^2)/4) - q22) + (h*q21*c3 + 4*q11)*sqrt(c1)*c4)/4)/c6;
+    jac_block(8,5) = -c3*c4/sqrt(c1);
+    jac_block(8,6) = -c2*c4/sqrt(c1);
+  end
+  jac_block(8,8) = -c5;
+  if c1 > 1.0e-5
+    jac_block(8,9) = (c2*(c1)*(q01*c3*c4 + q11*c2*c4 + (q31*c5 - q32)*sqrt(c1)) + (c1)^(3/2)*(-h*q01*c2*c3*c5 - h*q11*c2^2*c5 - 4*c2*(q31*c5 - q32) + (h*q31*c2 - 4*q11)*sqrt(c1)*c4)/4)/c6;
+    jac_block(8,10) = (c3*(c1)*(q01*c3*c4 + q11*c2*c4 + (q31*c5 - q32)*sqrt(c1)) + (c1)^(3/2)*(-h*q01*c3^2*c5 - h*q11*c2*c3*c5 - 4*c3*(q31*cos(h*sqrt(c2^2 + c3^2)/4) - q32) + (h*q31*c3 - 4*q01)*sqrt(c1)*c4)/4)/c6;
+  end
   jac_block(8,20) = 1;
-  jac_block(8,21) = -h*q12/4;
-  jac_block(8,22) = -h*q02/4;
+  if c1 > 1.0e-5
+    jac_block(8,21) = (c2*(c1)*(q01*c3*c4 + q11*c2*c4 + (q31*c5 - q32)*sqrt(c1)) + (c1)^(3/2)*(-h*q01*c2*c3*c5 - h*q11*c2^2*c5 - 4*c2*(q31*cos(h*sqrt(c2^2 + c3^2)/4) - q32) + (h*q31*c2 - 4*q11)*sqrt(c1)*c4)/4)/c6;
+    jac_block(8,22) = (c3*(c1)*(q01*c3*c4 + q11*c2*c4 + (q31*c5 - q32)*sqrt(c1)) + (c1)^(3/2)*(-h*q01*c3^2*c5 - h*q11*c2*c3*c5 - 4*c3*(q31*cos(h*sqrt(c2^2 + c3^2)/4) - q32) + (h*q31*c3 - 4*q01)*sqrt(c1)*c4)/4)/c6;
+  end
 
   jac_block(9,3) = A*Clz1*s1*rho_part_h1/(2*m1);
   jac_block(9,4) = (A*Clz1*s1^2*rho1/2 + g*m1*(2*q11^2 + 2*q21^2 - 1))/(m1*s1^2);
@@ -724,7 +771,7 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Evaluate hessian of lagrangian wrt decision variables  %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-function hes_block = get_first_knot_hes(z_knot, t_knot, knot_params, lambda_knot, t_next, lb, ub)
+function hes_block = get_first_knot_hes(z_knot, t_knot, knot_params, lambda_knot, z_next, t_next, lb, ub)
   hes_block = zeros(12, 12);
   h = t_next - t_knot;
   pn1 = z_knot(1);
@@ -739,6 +786,9 @@ function hes_block = get_first_knot_hes(z_knot, t_knot, knot_params, lambda_knot
   wz1 = z_knot(10);
   Cly1 = z_knot(11);
   Clz1 = z_knot(12);
+
+  wy2 = z_next(9);
+  wz2 = z_next(10);
 
   g = knot_params.g;
   m1 = knot_params.m;
@@ -758,8 +808,23 @@ function hes_block = get_first_knot_hes(z_knot, t_knot, knot_params, lambda_knot
   lambda8 = lambda_knot(8);
   lambda9 = lambda_knot(9);
   lambda10 = lambda_knot(10);
+  lambda11 = lambda_knot(11);
+  lambda12 = lambda_knot(12);
+  lambda13 = lambda_knot(13);
+  lambda14 = lambda_knot(14);
+  lambda15 = lambda_knot(15);
+  lambda16 = lambda_knot(16);
+  lambda17 = lambda_knot(17);
+  lambda18 = lambda_knot(18);
 
-  hes_block(3,3) = A*s1*(-2*Cly1*lambda10 + 2*Clz1*lambda9 + h*lambda4*s1*c_D1)*rho_part_h2/(4*m1) + (mu/(z_knot(3) - ub(1))^2);
+  c2 = (wy1 + wy2);
+  c3 = (wz1 + wz2);
+  c1 = c2^2 + c3^2;
+  c4 = sin(h*sqrt(c1)/4);
+  c5 = cos(h*sqrt(c1)/4);
+  c6 = (c1)^(5/2);
+
+  hes_block(3,3) = A*s1*(-2*Cly1*lambda10 + 2*Clz1*lambda9 + h*lambda4*s1*c_D1)*rho_part_h2/(4*m1);
   hes_block(3,4) = A*(-2*Cly1*lambda10 + 2*Clz1*lambda9 + h*lambda4*s1^2*c_D_part_s + 2*h*lambda4*s1*c_D1)*rho_part_h/(4*m1);
   hes_block(3,11) = -A*lambda10*s1*rho_part_h/(2*m1);
   hes_block(3,12) = A*lambda9*s1*rho_part_h/(2*m1);
@@ -771,33 +836,38 @@ function hes_block = get_first_knot_hes(z_knot, t_knot, knot_params, lambda_knot
   hes_block(4,8) = (2*g*lambda10*q21 + h*s1^2*(2*lambda1*q31 - lambda2*q01 - lambda3*q11))/s1^2;
   hes_block(4,11) = -A*lambda10*rho1/(2*m1);
   hes_block(4,12) = A*lambda9*rho1/(2*m1);
+
   hes_block(5,4) = hes_block(4,5);
-  hes_block(5,6) = -2*g*lambda10/s1;
   hes_block(5,7) = h*(g*lambda4 + lambda3*s1);
   hes_block(5,8) = -h*lambda2*s1;
-  hes_block(5,9) = -h*lambda7/4;
-  hes_block(5,10) = -h*lambda8/4;
+  if c6 > 1.0e-10
+    hes_block(5,9) = (c2*(c1)*(lambda7*c2*c4 + lambda8*c3*c4 + sqrt(c1)*(-g*h*lambda4*q21 + h*lambda2*q31*s1 - h*lambda3*q21*s1 + lambda15 + lambda5*c5)) + (c1)^(3/2)*(-h*lambda7*c2^2*cos(h*sqrt(c2^2 + c3^2)/4) - h*lambda8*c2*c3*c5 - 4*c2*(-g*h*lambda4*q21 + h*lambda2*q31*s1 - h*lambda3*q21*s1 + lambda15 + lambda5*c5) + (h*lambda5*c2 - 4*lambda7)*sqrt(c1)*c4)/4)/c6;
+    hes_block(5,10) = (c3*(c1)*(lambda7*c2*c4 + lambda8*c3*c4 + sqrt(c1)*(-g*h*lambda4*q21 + h*lambda2*q31*s1 - h*lambda3*q21*s1 + lambda15 + lambda5*c5)) + (c1)^(3/2)*(-h*lambda7*c2*c3*c5 - h*lambda8*c3^2*c5 - 4*c3*(-g*h*lambda4*q21 +h*lambda2*q31*s1 - h*lambda3*q21*s1 + lambda15 + lambda5*c5) + (h*lambda5*c3 - 4*lambda8)*sqrt(c1)*c4)/4)/c6;
+  end
   hes_block(6,4) = hes_block(4,6);
-  hes_block(6,5) = hes_block(5,6);
-  hes_block(6,6) = -4*g*lambda9/s1;
   hes_block(6,7) = -h*lambda2*s1;
   hes_block(6,8) = h*(-g*lambda4 - lambda3*s1);
-  hes_block(6,9) = -h*lambda8/4;
-  hes_block(6,10) = h*lambda7/4;
+  if c6 > 1.0e-10
+    hes_block(6,9) = (c2*(c1)*(-lambda7*c3*c4 + lambda8*c2*c4 + sqrt(c1)*(g*h*lambda4*q31 + h*lambda2*q21*s1 + h*lambda3*q31*s1 + lambda16 + lambda6*c5)) + (c1)^(3/2)*(h*lambda7*c2*c3*c5 - h*lambda8*c2^2*c5 - 4*c2*(g*h*lambda4*q31 + h*lambda2*q21*s1 + h*lambda3*q31*s1 + lambda16 + lambda6*c5) + (h*lambda6*c2 - 4*lambda8)*sqrt(c1)*c4)/4)/c6;
+    hes_block(6,10) = (c3*(c1)*(-lambda7*c3*c4 + lambda8*(wy1 +wy2)*c4 + sqrt(c1)*(g*h*lambda4*q31 + h*lambda2*q21*s1 + h*lambda3*q31*s1 + lambda16 + lambda6*c5)) + (c1)^(3/2)*(h*lambda7*c3^2*cos(h*sqrt(c2^2 + c3^2)/4) - h*lambda8*c2*c3*c5 - 4*c3*(g*h*lambda4*q31 + h*lambda2*q21*s1 + h*lambda3*q31*s1 + lambda16 + lambda6*c5) + (h*lambda6*c3 + 4*lambda7)*sqrt(c2^2 + c3^2)*c4)/4)/c6;
+  end
   hes_block(7,4) = hes_block(4,7);
   hes_block(7,5) = hes_block(5,7);
   hes_block(7,6) = hes_block(6,7);
-  hes_block(7,7) = -4*g*lambda9/s1 + 2*h*lambda1*s1;
-  hes_block(7,8) = -2*g*lambda10/s1;
-  hes_block(7,9) = h*lambda5/4;
-  hes_block(7,10) = -h*lambda6/4;
+  hes_block(7,7) = 2*h*lambda1*s1;
+  if c6 > 1.0e-10
+    hes_block(7,9) = (-c2*(c1)*(lambda5*c2*c4 - lambda6*c3*c4 + sqrt(c1)*(g*h*lambda4*q01 + 2*h*lambda1*q21*s1 - h*lambda2*q11*s1 + h*lambda3*q01*s1 - lambda17 - lambda7*c5)) + (c1)^(3/2)*(h*lambda5*c2^2*c5 - h*lambda6*c2*c3*c5 + 4*c2*(g*h*lambda4*q01 + 2*h*lambda1*q21*s1 - h*lambda2*q11*s1 + h*lambda3*q01*s1 - lambda17 - lambda7*c5) + (h*lambda7*c2 + 4*lambda5)*sqrt(c1)*c4)/4)/c6;
+    hes_block(7,10) = (-c3*(c1)*(lambda5*c2*c4 - lambda6*(wz1 +wz2)*c4 + sqrt(c1)*(g*h*lambda4*q01 + 2*h*lambda1*q21*s1 - h*lambda2*q11*s1 +h*lambda3*q01*s1 - lambda17 - lambda7*c5)) + (c1)^(3/2)*(h*lambda5*c2*c3*c5 - h*lambda6*c3^2*c5 + 4*c3*(g*h*lambda4*q01 + 2*h*lambda1*q21*s1 - h*lambda2*q11*s1 + h*lambda3*q01*s1 - lambda17 - lambda7*c5) + (h*lambda7*c3 - 4*lambda6)*sqrt(c1)*c4)/4)/c6;
+  end
   hes_block(8,4) = hes_block(4,8);
   hes_block(8,5) = hes_block(5,8);
   hes_block(8,6) = hes_block(6,8);
-  hes_block(8,7) = hes_block(7,8);
   hes_block(8,8) = 2*h*lambda1*s1;
-  hes_block(8,9) = h*lambda6/4;
-  hes_block(8,10) = h*lambda5/4;
+  if c6 > 1.0e-10
+    hes_block(8,9) = (-c2*(c1)*(lambda5*c3*c4 + lambda6*c2*c4 + sqrt(c1)*(-g*h*lambda4*q11 + 2*h*lambda1*q31*s1 - h*lambda2*q01*s1 -h*lambda3*q11*s1 - lambda18 - lambda8*c5)) + (c1)^(3/2)*(h*lambda5*c2*c3*c5 + h*lambda6*c2^2*c5 - 4*c2*(g*h*lambda4*q11 - 2*h*lambda1*q31*s1 + h*lambda2*q01*s1 + h*lambda3*q11*s1 + lambda18 + lambda8*c5) + (h*lambda8*c2 + 4*lambda6)*sqrt(c1)*c4)/4)/c6;
+    hes_block(8,10) = (-c3*(c1)*(lambda5*c3*c4 + lambda6*(wy1 +wy2)*c4 + sqrt(c1)*(-g*h*lambda4*q11 + 2*h*lambda1*q31*s1 - h*lambda2*q01*s1 - h*lambda3*q11*s1 - lambda18 - lambda8*c5)) + (c1)^(3/2)*(h*lambda5*c3^2*c5 + h*lambda6*c2*c3*c5 - 4*c3*(g*h*lambda4*q11 - 2*h*lambda1*q31*s1 + h*lambda2*q01*s1 + h*lambda3*q11*s1 + lambda18 + lambda8*c5) + (h*lambda8*c3 + 4*lambda5)*sqrt(c1)*c4)/4)/c6;
+  end
+
   hes_block(9,5) = hes_block(5,9);
   hes_block(9,6) = hes_block(6,9);
   hes_block(9,7) = hes_block(7,9);
@@ -815,7 +885,7 @@ function hes_block = get_first_knot_hes(z_knot, t_knot, knot_params, lambda_knot
   hes_block(12,12) = (mu/(z_knot(12) - ub(3))^2) + (mu/(lb(2) - z_knot(12))^2);
 end
 
-function hes_block = get_middle_knot_hes(z_knot, t_knot, knot_params, lambda_knot, t_next, lambda_last, lb, ub)
+function hes_block = get_middle_knot_hes(z_knot, t_knot, knot_params, lambda_knot, z_next, t_next, lambda_last, lb, ub)
   hes_block = zeros(12, 12);
   h = t_next - t_knot;
   pn1 = z_knot(1);
@@ -831,6 +901,9 @@ function hes_block = get_middle_knot_hes(z_knot, t_knot, knot_params, lambda_kno
   Cly1 = z_knot(11);
   Clz1 = z_knot(12);
 
+  wy2 = z_next(9);
+  wz2 = z_next(10);
+
   g = knot_params.g;
   m1 = knot_params.m;
   c_D1 = knot_params.c_D;
@@ -843,12 +916,19 @@ function hes_block = get_middle_knot_hes(z_knot, t_knot, knot_params, lambda_kno
   lambda2 = lambda_knot(2) + lambda_last(2);
   lambda3 = lambda_knot(3) + lambda_last(3);
   lambda4 = lambda_knot(4) + lambda_last(4);
-  lambda5 = lambda_knot(5) + lambda_last(5);
-  lambda6 = lambda_knot(6) + lambda_last(6);
-  lambda7 = lambda_knot(7) + lambda_last(7);
-  lambda8 = lambda_knot(8) + lambda_last(8);
+  lambda5 = lambda_knot(5);
+  lambda6 = lambda_knot(6);
+  lambda7 = lambda_knot(7);
+  lambda8 = lambda_knot(8);
   lambda9 = lambda_knot(9);
   lambda10 = lambda_knot(10);
+
+  c2 = (wy1 + wy2);
+  c3 = (wz1 + wz2);
+  c1 = c2^2 + c3^2;
+  c4 = sin(h*sqrt(c1)/4);
+  c5 = cos(h*sqrt(c1)/4);
+  c6 = (c1)^(5/2);
 
   hes_block(3,3) = A*s1*(-2*Cly1*lambda10 + 2*Clz1*lambda9 + h*lambda4*s1*c_D1)*rho_part_h2/(4*m1) + (mu/(z_knot(3) - ub(1))^2);
   hes_block(3,4) = A*(-2*Cly1*lambda10 + 2*Clz1*lambda9 + h*lambda4*s1^2*c_D_part_s + 2*h*lambda4*s1*c_D1)*rho_part_h/(4*m1);
@@ -862,34 +942,38 @@ function hes_block = get_middle_knot_hes(z_knot, t_knot, knot_params, lambda_kno
   hes_block(4,8) = (2*g*lambda10*q21 + h*s1^2*(2*lambda1*q31 - lambda2*q01 - lambda3*q11))/s1^2;
   hes_block(4,11) = -A*lambda10*rho1/(2*m1);
   hes_block(4,12) = A*lambda9*rho1/(2*m1);
+
   hes_block(5,4) = hes_block(4,5);
-  hes_block(5,5) = 2.0*mu_q;
-  hes_block(5,6) = -2*g*lambda10/s1;
   hes_block(5,7) = h*(g*lambda4 + lambda3*s1);
   hes_block(5,8) = -h*lambda2*s1;
-  hes_block(5,9) = -h*lambda7/4;
-  hes_block(5,10) = -h*lambda8/4;
+  if c6 > 1.0e-10
+    hes_block(5,9) = (c2*(c1)*(lambda7*c2*c4 + lambda8*c3*c4 + sqrt(c1)*(-g*h*lambda4*q21 + h*lambda2*q31*s1 - h*lambda3*q21*s1 + lambda5*c5)) + (c1)^(3/2)*(-h*lambda7*c2^2*cos(h*sqrt(c2^2 + c3^2)/4) - h*lambda8*c2*c3*c5 - 4*c2*(-g*h*lambda4*q21 + h*lambda2*q31*s1 - h*lambda3*q21*s1 + lambda5*c5) + (h*lambda5*c2 - 4*lambda7)*sqrt(c1)*c4)/4)/c6;
+    hes_block(5,10) = (c3*(c1)*(lambda7*c2*c4 + lambda8*c3*c4 + sqrt(c1)*(-g*h*lambda4*q21 + h*lambda2*q31*s1 - h*lambda3*q21*s1 + lambda5*c5)) + (c1)^(3/2)*(-h*lambda7*c2*c3*c5 - h*lambda8*c3^2*c5 - 4*c3*(-g*h*lambda4*q21 +h*lambda2*q31*s1 - h*lambda3*q21*s1 + lambda5*c5) + (h*lambda5*c3 - 4*lambda8)*sqrt(c1)*c4)/4)/c6;
+  end
   hes_block(6,4) = hes_block(4,6);
-  hes_block(6,5) = hes_block(5,6);
-  hes_block(6,6) = -4*g*lambda9/s1 + 2.0*mu_q;
   hes_block(6,7) = -h*lambda2*s1;
   hes_block(6,8) = h*(-g*lambda4 - lambda3*s1);
-  hes_block(6,9) = -h*lambda8/4;
-  hes_block(6,10) = h*lambda7/4;
+  if c6 > 1.0e-10
+    hes_block(6,9) = (c2*(c1)*(-lambda7*c3*c4 + lambda8*c2*c4 + sqrt(c1)*(g*h*lambda4*q31 + h*lambda2*q21*s1 + h*lambda3*q31*s1 + lambda6*c5)) + (c1)^(3/2)*(h*lambda7*c2*c3*c5 - h*lambda8*c2^2*c5 - 4*c2*(g*h*lambda4*q31 + h*lambda2*q21*s1 + h*lambda3*q31*s1 + lambda6*c5) + (h*lambda6*c2 - 4*lambda8)*sqrt(c1)*c4)/4)/c6;
+    hes_block(6,10) = (c3*(c1)*(-lambda7*c3*c4 + lambda8*(wy1 +wy2)*c4 + sqrt(c1)*(g*h*lambda4*q31 + h*lambda2*q21*s1 + h*lambda3*q31*s1 + lambda6*c5)) + (c1)^(3/2)*(h*lambda7*c3^2*cos(h*sqrt(c2^2 + c3^2)/4) - h*lambda8*c2*c3*c5 - 4*c3*(g*h*lambda4*q31 + h*lambda2*q21*s1 + h*lambda3*q31*s1 + lambda6*c5) + (h*lambda6*c3 + 4*lambda7)*sqrt(c2^2 + c3^2)*c4)/4)/c6;
+  end
   hes_block(7,4) = hes_block(4,7);
   hes_block(7,5) = hes_block(5,7);
   hes_block(7,6) = hes_block(6,7);
-  hes_block(7,7) = 2*(-2*g*lambda9 + s1*(h*lambda1*s1))/s1 + 2.0*mu_q;
-  hes_block(7,8) = -2*g*lambda10/s1;
-  hes_block(7,9) = h*lambda5/4;
-  hes_block(7,10) = -h*lambda6/4;
+  hes_block(7,7) = 2*h*lambda1*s1;
+  if c6 > 1.0e-10
+    hes_block(7,9) = (-c2*(c1)*(lambda5*c2*c4 - lambda6*c3*c4 + sqrt(c1)*(g*h*lambda4*q01 + 2*h*lambda1*q21*s1 - h*lambda2*q11*s1 + h*lambda3*q01*s1 - lambda7*c5)) + (c1)^(3/2)*(h*lambda5*c2^2*c5 - h*lambda6*c2*c3*c5 + 4*c2*(g*h*lambda4*q01 + 2*h*lambda1*q21*s1 - h*lambda2*q11*s1 + h*lambda3*q01*s1 - lambda7*c5) + (h*lambda7*c2 + 4*lambda5)*sqrt(c1)*c4)/4)/c6;
+    hes_block(7,10) = (-c3*(c1)*(lambda5*c2*c4 - lambda6*(wz1 +wz2)*c4 + sqrt(c1)*(g*h*lambda4*q01 + 2*h*lambda1*q21*s1 - h*lambda2*q11*s1 +h*lambda3*q01*s1 - lambda7*c5)) + (c1)^(3/2)*(h*lambda5*c2*c3*c5 - h*lambda6*c3^2*c5 + 4*c3*(g*h*lambda4*q01 + 2*h*lambda1*q21*s1 - h*lambda2*q11*s1 + h*lambda3*q01*s1 - lambda7*c5) + (h*lambda7*c3 - 4*lambda6)*sqrt(c1)*c4)/4)/c6;
+  end
   hes_block(8,4) = hes_block(4,8);
   hes_block(8,5) = hes_block(5,8);
   hes_block(8,6) = hes_block(6,8);
-  hes_block(8,7) = hes_block(7,8);
-  hes_block(8,8) = 2*h*lambda1*s1 + 2.0*mu_q;
-  hes_block(8,9) = h*lambda6/4;
-  hes_block(8,10) = h*lambda5/4;
+  hes_block(8,8) = 2*h*lambda1*s1;
+  if c6 > 1.0e-10
+    hes_block(8,9) = (-c2*(c1)*(lambda5*c3*c4 + lambda6*c2*c4 + sqrt(c1)*(-g*h*lambda4*q11 + 2*h*lambda1*q31*s1 - h*lambda2*q01*s1 -h*lambda3*q11*s1 - lambda8*c5)) + (c1)^(3/2)*(h*lambda5*c2*c3*c5 + h*lambda6*c2^2*c5 - 4*c2*(g*h*lambda4*q11 - 2*h*lambda1*q31*s1 + h*lambda2*q01*s1 + h*lambda3*q11*s1 + lambda8*c5) + (h*lambda8*c2 + 4*lambda6)*sqrt(c1)*c4)/4)/c6;
+    hes_block(8,10) = (-c3*(c1)*(lambda5*c3*c4 + lambda6*(wy1 +wy2)*c4 + sqrt(c1)*(-g*h*lambda4*q11 + 2*h*lambda1*q31*s1 - h*lambda2*q01*s1 - h*lambda3*q11*s1 - lambda8*c5)) + (c1)^(3/2)*(h*lambda5*c3^2*c5 + h*lambda6*c2*c3*c5 - 4*c3*(g*h*lambda4*q11 - 2*h*lambda1*q31*s1 + h*lambda2*q01*s1 + h*lambda3*q11*s1 + lambda8*c5) + (h*lambda8*c3 + 4*lambda5)*sqrt(c1)*c4)/4)/c6;
+  end
+
   hes_block(9,5) = hes_block(5,9);
   hes_block(9,6) = hes_block(6,9);
   hes_block(9,7) = hes_block(7,9);
@@ -904,6 +988,12 @@ function hes_block = get_middle_knot_hes(z_knot, t_knot, knot_params, lambda_kno
   hes_block(12,4) = hes_block(4,12);
   hes_block(11,11) = (mu/(z_knot(11) - ub(2))^2) + (mu/(lb(1) - z_knot(11))^2);
   hes_block(12,12) = (mu/(z_knot(12) - ub(3))^2) + (mu/(lb(2) - z_knot(12))^2);
+
+  hes_block(5,5) = hes_block(5,5) + 2.0*mu_q;
+  hes_block(6,6) = hes_block(6,6) + 2.0*mu_q;
+  hes_block(7,7) = hes_block(7,7) + 2.0*mu_q;
+  hes_block(8,8) = hes_block(8,8) + 2.0*mu_q;
+
 end
 
 function hes_block = get_end_knot_hes(z_knot, t_knot, knot_params, lambda_knot, t_next, lambda_last, lb, ub)
@@ -934,10 +1024,6 @@ function hes_block = get_end_knot_hes(z_knot, t_knot, knot_params, lambda_knot, 
   lambda2 = lambda_last(2);
   lambda3 = lambda_last(3);
   lambda4 = lambda_last(4);
-  lambda5 = lambda_last(5);
-  lambda6 = lambda_last(6);
-  lambda7 = lambda_last(7);
-  lambda8 = lambda_last(8);
   lambda9 = lambda_knot(1);
   lambda10 = lambda_knot(2);
 
@@ -957,34 +1043,27 @@ function hes_block = get_end_knot_hes(z_knot, t_knot, knot_params, lambda_knot, 
   hes_block(4,8) = (2*g*lambda10*q21 + h*s1^2*(2*lambda1*q31 - lambda2*q01 - lambda3*q11))/s1^2;
   hes_block(4,11) = -A*lambda10*rho1/(2*m1);
   hes_block(4,12) = A*lambda9*rho1/(2*m1);
+
   hes_block(5,4) = hes_block(4,5);
-  hes_block(5,5) = 2.0*mu_q;
   hes_block(5,6) = -2*g*lambda10/s1;
   hes_block(5,7) = h*(g*lambda4 + lambda3*s1);
   hes_block(5,8) = -h*lambda2*s1;
-  hes_block(5,9) = -h*lambda7/4;
-  hes_block(5,10) = -h*lambda8/4;
   hes_block(6,4) = hes_block(4,6);
   hes_block(6,5) = hes_block(5,6);
-  hes_block(6,6) = -4*g*lambda9/s1 + 2.0*mu_q;
+  hes_block(6,6) = -4*g*lambda9/s1;
   hes_block(6,7) = -h*lambda2*s1;
   hes_block(6,8) = h*(-g*lambda4 - lambda3*s1);
-  hes_block(6,9) = -h*lambda8/4;
-  hes_block(6,10) = h*lambda7/4;
   hes_block(7,4) = hes_block(4,7);
   hes_block(7,5) = hes_block(5,7);
   hes_block(7,6) = hes_block(6,7);
-  hes_block(7,7) = 2*(-2*g*lambda9 + s1*(h*lambda1*s1))/s1 + 2.0*mu_q;
+  hes_block(7,7) = 2*(-2*g*lambda9 + s1*(h*lambda1*s1))/s1;
   hes_block(7,8) = -2*g*lambda10/s1;
-  hes_block(7,9) = h*lambda5/4;
-  hes_block(7,10) = -h*lambda6/4;
   hes_block(8,4) = hes_block(4,8);
   hes_block(8,5) = hes_block(5,8);
   hes_block(8,6) = hes_block(6,8);
   hes_block(8,7) = hes_block(7,8);
-  hes_block(8,8) = 2*h*lambda1*s1 + 2.0*mu_q;
-  hes_block(8,9) = h*lambda6/4;
-  hes_block(8,10) = h*lambda5/4;
+  hes_block(8,8) = 2*h*lambda1*s1;
+
   hes_block(9,5) = hes_block(5,9);
   hes_block(9,6) = hes_block(6,9);
   hes_block(9,7) = hes_block(7,9);
@@ -999,6 +1078,11 @@ function hes_block = get_end_knot_hes(z_knot, t_knot, knot_params, lambda_knot, 
   hes_block(12,4) = hes_block(4,12);
   hes_block(11,11) = (mu/(z_knot(11) - ub(2))^2) + (mu/(lb(1) - z_knot(11))^2);
   hes_block(12,12) = (mu/(z_knot(12) - ub(3))^2) + (mu/(lb(2) - z_knot(12))^2);
+
+  hes_block(5,5) = hes_block(5,5) + 2.0*mu_q;
+  hes_block(6,6) = hes_block(6,6) + 2.0*mu_q;
+  hes_block(7,7) = hes_block(7,7) + 2.0*mu_q;
+  hes_block(8,8) = hes_block(8,8) + 2.0*mu_q;
 end
 
 if option.eval_hes
@@ -1010,18 +1094,20 @@ if option.eval_hes
     z_knot = O.z(z_start:z_end);
 
     if i == 1
+      z_next = O.z(z_end+1:O.knot_size*(i+1));
       con_end = con_start + O.First_knot_constraints - 1;
       lambda_knot = O.lambda(con_start:con_end);
-      hes_block = get_first_knot_hes(z_knot, O.t(i), params(i), lambda_knot, O.t(i+1), O.lb, O.ub);
+      hes_block = get_first_knot_hes(z_knot, O.t(i), params(i), lambda_knot, z_next, O.t(i+1), O.lb, O.ub);
       con_start = con_end + 1;
     elseif i == O.N_knots
       con_end = con_start + O.End_knot_constraints - 1;
       lambda_knot = O.lambda(con_start:con_end);
       hes_block = get_end_knot_hes(z_knot, O.t(i-1), params(i), lambda_knot, O.t(i), lambda_last, O.lb, O.ub);
     else
+      z_next = O.z(z_end+1:O.knot_size*(i+1));
       con_end = con_start + O.Middle_knot_constraints - 1;
       lambda_knot = O.lambda(con_start:con_end);
-      hes_block = get_middle_knot_hes(z_knot, O.t(i), params(i), lambda_knot, O.t(i+1), lambda_last, O.lb, O.ub);
+      hes_block = get_middle_knot_hes(z_knot, O.t(i), params(i), lambda_knot, z_next, O.t(i+1), lambda_last, O.lb, O.ub);
       con_start = con_end + 1;
     end
 
