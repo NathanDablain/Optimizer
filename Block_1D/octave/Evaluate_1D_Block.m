@@ -99,7 +99,8 @@ function eq_vec = get_first_knot_eq(z_knot, t_knot, z_next, t_next, lb, ub, ic)
             z_next(2) - z_knot(2) - 0.5*h*(dx1(2) + dx2(2));...
             % the initial condition constraints for the knot
             ic(1) - z_knot(1);...
-            ic(2) - z_knot(2)];
+            ic(2) - z_knot(2);...
+            ic(3) - z_knot(3)];
 end
 
 function eq_vec = get_middle_knot_eq(z_knot, t_knot, z_next, t_next, lb, ub)
@@ -149,7 +150,7 @@ end
 %% Evaluate jacobian of constraints wrt decision variables%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function jac_block = get_first_knot_jac(z_knot, t_knot, z_next, t_next)
-  jac_block = zeros(4, 6);
+  jac_block = zeros(5, 6);
   h = t_next - t_knot;
 
   jac_block(1,1) = -1;
@@ -166,6 +167,7 @@ function jac_block = get_first_knot_jac(z_knot, t_knot, z_next, t_next)
 
   jac_block(4,2) = -1;
 
+  jac_block(5,3) = -1;
 end
 
 function jac_block = get_middle_knot_jac(z_knot, t_knot, z_next, t_next)
