@@ -1,7 +1,7 @@
 % We want to show how this would work in real time in an MPC context
 % So will need to run an outer sim loop, say 1000Hz
-% Run an inner Flight Controll loop, say 100Hz
-% And run an inner inner SQP loop, say 20 Hz
+% Run an inner Flight Controller loop, say 100Hz
+% And run an inner inner SQP loop, say 10 Hz
 % System gets some amount of initial iterations to converge and then gets to only run one iteration per inner inner loop
 
 clear
@@ -10,7 +10,7 @@ clc
 
 sim_rate = 1000;
 fc_rate = 100;
-sqp_rate = 20;
+sqp_rate = 10;
 tf = 2.0;
 t = linspace(0, tf, tf*sim_rate);
 x_true = zeros(2,length(t));
@@ -19,18 +19,17 @@ u_true = zeros(1,length(t));
 t_sqp = linspace(0, tf, tf*sqp_rate);
 pf = zeros(1,tf*sqp_rate);
 df = zeros(1,tf*sqp_rate);
-position_mean = 0.0;
-position_sigma = 0.001;
+position_mean = 0.0001;
+position_sigma = 0.00;
 velocity_mean = 0.0;
-velocity_sigma = 0.01;
-acceleration_mean = 0.2;
-acceleration_sigma = 0.1;
-u_command = 0.0;
+velocity_sigma = 0.0;
+acceleration_mean = 0.0;
+acceleration_sigma = 0.0;
 
 O = struct(...
   'N_states', 2,...
   'N_inputs', 1,...
-  'N_knots', 50,...
+  'N_knots', 10,...
   'N_lb', 1,...
   'N_ub', 1,...
   'ic', [0 0.0 0.0],...
@@ -75,6 +74,7 @@ O.inputs = zeros(1,O.N_knots);
 % Initial solve
 O.iterations = 5;
 O = Solve_1D_Block(O);
+u_command = O.inputs(1);
 Ideal_states = O.states;
 Ideal_inputs = O.inputs;
 Ideal_time = O.t;
@@ -90,7 +90,7 @@ for i = 2:length(t)
   if mod(i,sim_rate/sqp_rate) == 0 && i ~= length(t)
     O.iterations = 1;
     O.t = linspace(t(i-1), O.tf, O.N_knots);
-    O.ic = [x_true(:,i-1); u_true(1,i-1)];
+    O.ic = [x_true(:,i-1); min(max(u_true(1,i-1), -1.999), 1.999)];
     O.z(1:length(O.ic)) = O.ic';
     O = Solve_1D_Block(O);
     pf(pf_counter) = O.pf;
@@ -100,7 +100,7 @@ for i = 2:length(t)
 
   % Flight Controller loop 100Hz
   if mod(i,sim_rate/fc_rate) == 0
-    u_command = interp1(O.t, O.inputs, t(i));
+    u_command = interp1(O.t, O.inputs, t(i)+(0.5/fc_rate));
   end
 
   % Noise

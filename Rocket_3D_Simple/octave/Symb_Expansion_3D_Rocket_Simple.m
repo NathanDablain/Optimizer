@@ -14,7 +14,7 @@ clc
 
 pkg load symbolic
 
-function [dx, states, vars, w] = get_dx1(pn1, pe1, pd1, s1, q01, q11, q21, q31, wy1, wz1, Cly1, Clz1)
+function [dx, w] = get_dx1(pn1, pe1, pd1, s1, q01, q11, q21, q31, wy1, wz1, Cly1, Clz1)
   syms c_D(s1) rho(pd1) A g T1 m1
 
   q = [q01; q11; q21; q31];
@@ -27,14 +27,11 @@ function [dx, states, vars, w] = get_dx1(pn1, pe1, pd1, s1, q01, q11, q21, q31, 
   dx(4) = ((T1 - D)/m1) + 2*g*(-q01*q21 + q11*q31);
   dx(5:8) = 0.5.*omega*q;
 
-  states = [pn1, pe1, pd1, s1, q01, q11, q21, q31, wy1, wz1];
-  inputs = [Cly1, Clz1];
-  vars = [states inputs];
   w = [(-(0.5*rho(pd1)*A*Clz1*s1*s1/m1) - g*(-2*q11^2 - 2*q21^2 + 1))/s1;...
        ((0.5*rho(pd1)*A*Cly1*s1*s1/m1) + 2*g*(q01*q11 + q21*q31))/s1];
 end
 
-function [dx, states, vars] = get_dx2(pn2, pe2, pd2, s2, q02, q12, q22, q32, wy2, wz2, Cly2, Clz2)
+function [dx, w] = get_dx2(pn2, pe2, pd2, s2, q02, q12, q22, q32, wy2, wz2, Cly2, Clz2)
   syms c_D(s2) rho(pd2) A g T2 m2
 
   q = [q02; q12; q22; q32];
@@ -47,9 +44,8 @@ function [dx, states, vars] = get_dx2(pn2, pe2, pd2, s2, q02, q12, q22, q32, wy2
   dx(4) = ((T2 - D)/m2) + 2*g*(-q02*q22 + q12*q32);
   dx(5:8) = 0.5.*omega*q;
 
-  states = [pn2, pe2, pd2, s2, q02, q12, q22, q32, wy2, wz2];
-  inputs = [Cly2, Clz2];
-  vars = [states inputs];
+  w = [(-(0.5*rho(pd2)*A*Clz2*s2*s2/m2) - g*(-2*q12^2 - 2*q22^2 + 1))/s2;...
+       ((0.5*rho(pd2)*A*Cly2*s2*s2/m2) + 2*g*(q02*q12 + q22*q32))/s2];
 end
 
 function c = get_constraints_first_knot(states, inputs, slack, lbs, ubs, ic)
@@ -89,13 +85,14 @@ function c = get_constraints_first_knot(states, inputs, slack, lbs, ubs, ic)
   Cly2 = inputs(2,1);
   Clz2 = inputs(2,2);
 
-  [dx1, ~, ~, w_guess] = get_dx1(pn1, pe1, pd1, s1, q01, q11, q21, q31, wy1, wz1, Cly1, Clz1);
+  [dx1, w_guess] = get_dx1(pn1, pe1, pd1, s1, q01, q11, q21, q31, wy1, wz1, Cly1, Clz1);
   dx1 = simplify(dx1);
-  dx2 = simplify(get_dx2(pn2, pe2, pd2, s2, q02, q12, q22, q32, wy2, wz2, Cly2, Clz2));
+  [dx2, w_guess2] = get_dx2(pn2, pe2, pd2, s2, q02, q12, q22, q32, wy2, wz2, Cly2, Clz2);
+  dx2 = simplify(dx2);
 
-  wy = 0.5*(wy1 + wy2);
-  wz = 0.5*(wz1 + wz2);
-  w = [wy wz];
+##  wy = 0.5*(wy1 + wy2);
+##  wz = 0.5*(wz1 + wz2);
+  w = [wy1 wz1];
 
   theta = norm(w)*h;
 
@@ -115,8 +112,8 @@ function c = get_constraints_first_knot(states, inputs, slack, lbs, ubs, ic)
     constraint(3);...
     constraint(4);...
     % the angular rate defect constraints for the knot
-    wy1 - w_guess(1);...
-    wz1 - w_guess(2);...
+    wy1 - 0.5*(w_guess(1) + w_guess2(1));...
+    wz1 - 0.5*(w_guess(2) + w_guess2(2));...
     % the initial condition constraints for the knot
     pn_ic - pn1;...
     pe_ic - pe1;...
@@ -157,22 +154,34 @@ function c = get_constraints_middle_knot(states, inputs, slack, lbs, ubs)
   Cly2 = inputs(2,1);
   Clz2 = inputs(2,2);
 
-  [dx1, ~, ~, w] = get_dx1(pn1, pe1, pd1, s1, q01, q11, q21, q31, wy1, wz1, Cly1, Clz1);
+  [dx1, w_guess] = get_dx1(pn1, pe1, pd1, s1, q01, q11, q21, q31, wy1, wz1, Cly1, Clz1);
   dx1 = simplify(dx1);
-  dx2 = simplify(get_dx2(pn2, pe2, pd2, s2, q02, q12, q22, q32, wy2, wz2, Cly2, Clz2));
+  [dx2, w_guess2] = get_dx2(pn2, pe2, pd2, s2, q02, q12, q22, q32, wy2, wz2, Cly2, Clz2);
+  dx2 = simplify(dx2);
+
+##  wy = 0.5*(wy1 + wy2);
+##  wz = 0.5*(wz1 + wz2);
+  w = [wy1 wz1];
+
+  theta = norm(w)*h;
+
+  delta_q = [cos(theta/2);0;(w(1)/norm(w))*sin(theta/2);(w(2)/norm(w))*sin(theta/2)];
+
+  constraint = [q02;q12;q22;q32] - [q01 -q11 -q21 -q31; q11 q01 -q31 q21; q21 q31 q01 -q11; q31 -q21 q11 q01]*delta_q;
+
   c = [...
     % the trapezoidal defect constraints for the knot
     pn2 - pn1 - 0.5*h*(dx1(1) + dx2(1));...
     pe2 - pe1 - 0.5*h*(dx1(2) + dx2(2));...
     pd2 - pd1 - 0.5*h*(dx1(3) + dx2(3));...
     s2  - s1  - 0.5*h*(dx1(4) + dx2(4));...
-    q02 - q01 - 0.5*h*(dx1(5) + dx2(5));...
-    q12 - q11 - 0.5*h*(dx1(6) + dx2(6));...
-    q22 - q21 - 0.5*h*(dx1(7) + dx2(7));...
-    q32 - q31 - 0.5*h*(dx1(8) + dx2(8));...
+    constraint(1);...
+    constraint(2);...
+    constraint(3);...
+    constraint(4);...
     % the angular rate defect constraints for the knot
-    wy1 - w(1);...
-    wz1 - w(2)];
+    wy1 - 0.5*h*(w_guess(1) + w_guess2(1));...
+    wz1 - 0.5*h*(w_guess(2) + w_guess2(2))];
 end
 
 function c = get_constraints_end_knot(states, inputs, slack, lbs, ubs)
@@ -191,12 +200,7 @@ function c = get_constraints_end_knot(states, inputs, slack, lbs, ubs)
   Cly1 = inputs(1,1);
   Clz1 = inputs(1,2);
 
-  [~, ~, ~, w] = get_dx1(pn1, pe1, pd1, s1, q01, q11, q21, q31, wy1, wz1, Cly1, Clz1);
-
-  c = [...
-    % the angular rate defect constraints for the knot
-    wy1 - w(1);...
-    wz1 - w(2)];
+  c = [];
 end
 
 function lagrangian = get_lagrangian_first_knot(states, inputs, slack, lbs, ubs, ic)
@@ -299,9 +303,9 @@ fprintf('\n\n\n')
 for i = 1:length(z)
   dif1 = simplify(diff(Lf, z(i)));
   for j = 1:length(z)
-    if i >= 9 && i <= 10 && j >= 9 && j <= 10
-      continue;
-    end
+##    if i >= 9 && i <= 10 && j >= 9 && j <= 10
+##      continue;
+##    end
     blocklf = simplify(diff(dif1, z(j)));
     if blocklf ~= 0
       if i > j
