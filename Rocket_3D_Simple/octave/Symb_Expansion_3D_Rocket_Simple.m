@@ -203,6 +203,60 @@ function c = get_constraints_end_knot(states, inputs, slack, lbs, ubs)
   c = [];
 end
 
+function j = get_trapezoidal_integration(states, inputs)
+  syms h g;
+
+  pn1 = states(1,1);
+  pe1 = states(1,2);
+  pd1 = states(1,3);
+  s1 = states(1,4);
+  q01 = states(1,5);
+  q11 = states(1,6);
+  q21 = states(1,7);
+  q31 = states(1,8);
+  wy1 = states(1,9);
+  wz1 = states(1,10);
+  Cly1 = inputs(1,1);
+  Clz1 = inputs(1,2);
+
+  pn2 = states(2,1);
+  pe2 = states(2,2);
+  pd2 = states(2,3);
+  s2 = states(2,4);
+  q02 = states(2,5);
+  q12 = states(2,6);
+  q22 = states(2,7);
+  q32 = states(2,8);
+  wy2 = states(2,9);
+  wz2 = states(2,10);
+  Cly2 = inputs(2,1);
+  Clz2 = inputs(2,2);
+
+  [dx1, w_guess] = get_dx1(pn1, pe1, pd1, s1, q01, q11, q21, q31, wy1, wz1, Cly1, Clz1);
+  dx1 = simplify(dx1);
+  [dx2, w_guess2] = get_dx2(pn2, pe2, pd2, s2, q02, q12, q22, q32, wy2, wz2, Cly2, Clz2);
+  dx2 = simplify(dx2);
+
+  w = [wy1 wz1];
+
+  theta = norm(w)*h;
+
+  delta_q = [cos(theta/2);0;(w(1)/norm(w))*sin(theta/2);(w(2)/norm(w))*sin(theta/2)];
+
+  constraint = [q02;q12;q22;q32] - [q01 -q11 -q21 -q31; q11 q01 -q31 q21; q21 q31 q01 -q11; q31 -q21 q11 q01]*delta_q;
+
+  j = [...
+    % the trapezoidal defect constraints for the knot
+    pn2 - pn1 - 0.5*h*(dx1(1) + dx2(1));...
+    pe2 - pe1 - 0.5*h*(dx1(2) + dx2(2));...
+    pd2 - pd1 - 0.5*h*(dx1(3) + dx2(3));...
+    s2  - s1  - 0.5*h*(dx1(4) + dx2(4));...
+    constraint(1);...
+    constraint(2);...
+    constraint(3);...
+    constraint(4)];
+end
+
 function lagrangian = get_lagrangian_first_knot(states, inputs, slack, lbs, ubs, ic)
   syms mu lambda1 lambda2 lambda3 lambda4 lambda5 lambda6 lambda7...
           lambda8 lambda9 lambda10 lambda11 lambda12 lambda13 lambda14...
@@ -253,7 +307,7 @@ ubs = [ub_pd ub_Cly ub_Clz];
 ic = [pn_ic pe_ic pd_ic s_ic q0_ic q1_ic q2_ic q3_ic];
 xd = [xd1 xd2 xd3];
 
-z = [pn1 pe1 pd1 s1 q01 q11 q21 q31 wy1 wz1 Cly1 Clz1 pn2 pe2 pd2 s2 q02 q12 q22 q32 wy2 wz2 Cly2 Clz2];
+##z = [pn1 pe1 pd1 s1 q01 q11 q21 q31 wy1 wz1 Cly1 Clz1 pn2 pe2 pd2 s2 q02 q12 q22 q32 wy2 wz2 Cly2 Clz2];
 
 ##cf = simplify(get_constraints_first_knot(states, inputs, slack, lbs, ubs, ic));
 
@@ -261,9 +315,11 @@ z = [pn1 pe1 pd1 s1 q01 q11 q21 q31 wy1 wz1 Cly1 Clz1 pn2 pe2 pd2 s2 q02 q12 q22
 ##
 ##ce = simplify(get_constraints_end_knot(states, inputs, slack, lbs, ubs));
 
-Lf = get_lagrangian_first_knot(states, inputs, slack, lbs, ubs, ic);
+##Lf = get_lagrangian_first_knot(states, inputs, slack, lbs, ubs, ic);
 
 ##Lm = simplify(get_lagrangian_middle_knot(states, inputs, slack, lbs, ubs));
+
+J = get_trapezoidal_integration(states, inputs);
 
 clc
 ##disp(cf)
@@ -298,24 +354,21 @@ clc
 ##end
 ##fprintf('\n\n\n')
 
-z = [pn1 pe1 pd1 s1 q01 q11 q21 q31 wy1 wz1 Cly1 Clz1];
-fprintf('\n\n\n')
-for i = 1:length(z)
-  dif1 = simplify(diff(Lf, z(i)));
-  for j = 1:length(z)
-##    if i >= 9 && i <= 10 && j >= 9 && j <= 10
-##      continue;
+##z = [pn1 pe1 pd1 s1 q01 q11 q21 q31 wy1 wz1 Cly1 Clz1];
+##fprintf('\n\n\n')
+##for i = 1:length(z)
+##  dif1 = simplify(diff(Lf, z(i)));
+##  for j = 1:length(z)
+##    blocklf = simplify(diff(dif1, z(j)));
+##    if blocklf ~= 0
+##      if i > j
+##        fprintf('hes_block(%d,%d) = hes_block(%d,%d);\n',i,j,j,i);
+##      else
+##        fprintf('hes_block(%d,%d) = %s;\n',i,j,char(blocklf));
+##      end
 ##    end
-    blocklf = simplify(diff(dif1, z(j)));
-    if blocklf ~= 0
-      if i > j
-        fprintf('hes_block(%d,%d) = hes_block(%d,%d);\n',i,j,j,i);
-      else
-        fprintf('hes_block(%d,%d) = %s;\n',i,j,char(blocklf));
-      end
-    end
-  end
-end
+##  end
+##end
 
 ##fprintf('\n\n\n')
 ##for i = 1:length(z)
@@ -331,3 +384,14 @@ end
 ##    end
 ##  end
 ##end
+
+z = [pn2 pe2 pd2 s2 q02 q12 q22 q32];
+for i = 1:length(J)
+  for j = 1:length(z)
+    block_con = simplify(diff(J(i), z(j)));
+    if block_con ~= 0
+      fprintf('jac(%d,%d) = %s;\n',i,j,char(block_con));
+    end
+  end
+end
+fprintf('\n\n\n')

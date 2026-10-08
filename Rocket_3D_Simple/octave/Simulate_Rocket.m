@@ -122,28 +122,101 @@ function [dx, w] = get_dx(z_knot, knot_params)
   w = [wy; wz];
 end
 
+function jac = get_jacobian(z_next, next_params, h)
+  jac = zeros(8, 8);
 
-params(1:O.N_knots) = struct('T', 0, 'm', 0, 'g', 0, 'rho', 0, 'c_D', 0,...
-                             'rho_part_h', 0, 'c_D_part_s', 0,...
-                             'rho_part_h2', 0, 'c_D_part_s2', 0);
+  pd2 = z_next(3);
+  s2 = z_next(4);
+  q02 = z_next(5);
+  q12 = z_next(6);
+  q22 = z_next(7);
+  q32 = z_next(8);
 
-for i = 1:O.N_knots
+  g = next_params.g;
+  m = next_params.m;
+  c_D = next_params.c_D;
+  rho = next_params.rho;
+  rho_part_h = next_params.rho_part_h;
+  c_D_part_s = next_params.c_D_part_s;
+
+  jac(1,1) = 1;
+  jac(1,4) = h*(q22^2 + q32^2 - 1/2);
+  jac(1,7) = 2*h*q22*s2;
+  jac(1,8) = 2*h*q32*s2;
+  jac(2,2) = 1;
+  jac(2,4) = -h*(q02*q32 + q12*q22);
+  jac(2,5) = -h*q32*s2;
+  jac(2,6) = -h*q22*s2;
+  jac(2,7) = -h*q12*s2;
+  jac(2,8) = -h*q02*s2;
+  jac(3,3) = 1;
+  jac(3,4) = h*(q02*q22 - q12*q32);
+  jac(3,5) = h*q22*s2;
+  jac(3,6) = -h*q32*s2;
+  jac(3,7) = h*q02*s2;
+  jac(3,8) = -h*q12*s2;
+  jac(4,3) = A*h*s2^2*c_D*rho_part_h/(4*m);
+  jac(4,4) = (A*h*s2*(s2*c_D_part_s + 2*c_D)*rho/4 + m)/m;
+  jac(4,5) = g*h*q22;
+  jac(4,6) = -g*h*q32;
+  jac(4,7) = g*h*q02;
+  jac(4,8) = -g*h*q12;
+  jac(5,5) = 1;
+  jac(6,6) = 1;
+  jac(7,7) = 1;
+  jac(8,8) = 1;
+
+end
+
+function func = get_function(z_knot, h, knot_params, z_next, next_params)
+
+  [dx1, w1] = get_dx(z_knot, knot_params);
+  [dx2, w2] = get_dx(z_next, next_params);
+
+  w = 0.5*(w1 + w2);
+
+  if norm(w) > 1.0e-5
+    theta = norm(w)*h;
+    delta_q = [cos(theta/2);0;(w(1)/norm(w))*sin(theta/2);(w(2)/norm(w))*sin(theta/2)];
+  else
+    delta_q = [1;0;0;0];
+  end
+  q_new = quaternion_multiply(z_knot(5:8), delta_q, 'right');
+
+  func = [z_next(1:4) - z_knot(1:4) - 0.5*h*(dx1(1:4)' + dx2(1:4)');...
+          z_next(5:8) - q_new];
+end
+
+params_knot = struct('T', 0, 'm', 0, 'g', 0, 'rho', 0, 'c_D', 0,...
+                 'rho_part_h', 0, 'c_D_part_s', 0,...
+                 'rho_part_h2', 0, 'c_D_part_s2', 0);
+params_next = struct('T', 0, 'm', 0, 'g', 0, 'rho', 0, 'c_D', 0,...
+                 'rho_part_h', 0, 'c_D_part_s', 0,...
+                 'rho_part_h2', 0, 'c_D_part_s2', 0);
+
+for i = 1:O.N_knots-1
   knot_start = O.knot_size*(i-1) + 1;
   knot_end = O.knot_size*i;
-  O.z(knot_start+10) = 0.0;
-  O.z(knot_start+11) = -0.1;
-  if i > 1
-    O.z(knot_start:knot_start+3) = z_knot(1:4) + dx(1:4)'*(O.t(i) - O.t(i-1));
-    theta = norm(w)*(O.t(i) - O.t(i-1));
-    delta_q = [cos(theta/2);0;(w(1)/norm(w))*sin(theta/2);(w(2)/norm(w))*sin(theta/2)];
-    q_new = quaternion_multiply(z_knot(5:8), delta_q, 'right');
-    O.z(knot_start+4:knot_start+7) = q_new;
-  end
   z_knot = O.z(knot_start:knot_end);
-  params(i) = get_knot_params(z_knot, O.t(i));
-  [dx, w] = get_dx(z_knot, params(i));
+  params_knot = get_knot_params(z_knot, O.t(i));
+  z_next = O.z(knot_end+1:O.knot_size*(i+1));
+  z_next(1:8) = z_knot(1:8);
+  z_next(11) = 0.0;
+  z_next(12) = -0.1;
+  params_next = get_knot_params(z_next, O.t(i+1));
+  dt = O.t(i+1) - O.t(i);
+  for j = 1:5
+    jac = get_jacobian(z_next, params_next, dt);
+    func = get_function(z_knot, dt, params_knot, z_next, params_next);
+    delta_z = jac \ -func;
+    z_next(1:8) = z_next(1:8) + delta_z;
+    params_next = get_knot_params(z_next, O.t(i+1));
+  end
+  [~, w1] = get_dx(z_knot, params_knot);
+  [~, w2] = get_dx(z_next, params_next);
+
+  w = 0.5*(w1 + w2);
   O.z(knot_start+8:knot_start+9) = w;
+  O.z(knot_end+1:O.knot_size*(i+1)) = z_next;
 end
-
 end
-

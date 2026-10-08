@@ -371,7 +371,7 @@ end
 %% Evaluate jacobian of constraints wrt decision variables%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function jac_block = get_first_knot_jac(z_knot, t_knot, knot_params, z_next, t_next, next_params)
-  jac_block = zeros(18, 22);
+  jac_block = zeros(18, 24);
   h = t_next - t_knot;
   pn1 = z_knot(1);
   pe1 = z_knot(2);
@@ -536,7 +536,7 @@ function jac_block = get_first_knot_jac(z_knot, t_knot, knot_params, z_next, t_n
 end
 
 function jac_block = get_middle_knot_jac(z_knot, t_knot, knot_params, z_next, t_next, next_params)
-  jac_block = zeros(10, 22);
+  jac_block = zeros(10, 24);
   h = t_next - t_knot;
   pn1 = z_knot(1);
   pe1 = z_knot(2);
@@ -1033,43 +1033,21 @@ function hes_block = get_end_knot_hes(z_knot, t_knot, knot_params, lambda_knot, 
   hes_block(5,6) = -g*lambda10/s1;
   hes_block(5,7) = h*(g*lambda4 + lambda3*s1);
   hes_block(5,8) = -h*lambda2*s1;
-  hes_block(5,9) = (h*lambda5*wy1^3*c3 + h*lambda5*wy1*wz1^2*c3 - h*lambda7*wy1^2*c1*c2 - h*lambda8*wy1*wz1*c1*c2 - 2*lambda7*wz1^2*c3 + 2*lambda8*wy1*wz1*c3)/(2*c1^3);
-  hes_block(5,10) = (h*lambda5*wy1^2*wz1*c3 + h*lambda5*wz1^3*c3 - h*lambda7*wy1*wz1*c1*c2 - h*lambda8*wz1^2*c1*c2 + 2*lambda7*wy1*wz1*c3 - 2*lambda8*wy1^2*c3)/(2*c1^3);
   hes_block(6,4) = hes_block(4,6);
   hes_block(6,5) = hes_block(5,6);
   hes_block(6,6) = -2*g*lambda9/s1;
   hes_block(6,7) = -h*lambda2*s1;
   hes_block(6,8) = h*(-g*lambda4 - lambda3*s1);
-  hes_block(6,9) = (h*lambda6*wy1^3*c3 + h*lambda6*wy1*wz1^2*c3 + h*lambda7*wy1*wz1*c1*c2 - h*lambda8*wy1^2*c1*c2 - 2*lambda7*wy1*wz1*c3 - 2*lambda8*wz1^2*c3)/(2*c1^3);
-  hes_block(6,10) = (h*lambda6*wy1^2*wz1*c3 + h*lambda6*wz1^3*c3 + h*lambda7*wz1^2*c1*c2 - h*lambda8*wy1*wz1*c1*c2 + 2*lambda7*wy1^2*c3 + 2*lambda8*wy1*wz1*c3)/(2*c1^3);
   hes_block(7,4) = hes_block(4,7);
   hes_block(7,5) = hes_block(5,7);
   hes_block(7,6) = hes_block(6,7);
   hes_block(7,7) = -2*g*lambda9/s1 + 2*h*lambda1*s1;
   hes_block(7,8) = -g*lambda10/s1;
-  hes_block(7,9) = (h*lambda5*wy1^2*c1*c2 - h*lambda6*wy1*wz1*c1*c2 + h*lambda7*wy1^3*c3 + h*lambda7*wy1*wz1^2*c3 + 2*lambda5*wz1^2*c3 + 2*lambda6*wy1*wz1*c3)/(2*c1^3);
-  hes_block(7,10) = (h*lambda5*wy1*wz1*c1*c2 - h*lambda6*wz1^2*c1*c2 + h*lambda7*wy1^2*wz1*c3 + h*lambda7*wz1^3*c3 - 2*lambda5*wy1*wz1*c3 - 2*lambda6*wy1^2*c3)/(2*c1^3);
   hes_block(8,4) = hes_block(4,8);
   hes_block(8,5) = hes_block(5,8);
   hes_block(8,6) = hes_block(6,8);
   hes_block(8,7) = hes_block(7,8);
   hes_block(8,8) = 2*h*lambda1*s1;
-  hes_block(8,9) = (h*lambda5*wy1*wz1*c1*c2 + h*lambda6*wy1^2*c1*c2 + h*lambda8*wy1^3*c3 + h*lambda8*wy1*wz1^2*c3 - 2*lambda5*wy1*wz1*c3 + 2*lambda6*wz1^2*c3)/(2*c1^3);
-  hes_block(8,10) = (h*lambda5*wz1^2*c1*c2 + h*lambda6*wy1*wz1*c1*c2 + h*lambda8*wy1^2*wz1*c3 + h*lambda8*wz1^3*c3 + 2*lambda5*wy1^2*c3 - 2*lambda6*wy1*wz1*c3)/(2*c1^3);
-
-  hes_block(9,5) = hes_block(5,9);
-  hes_block(9,6) = hes_block(6,9);
-  hes_block(9,7) = hes_block(7,9);
-  hes_block(9,8) = hes_block(8,9);
-  hes_block(9,9) = (-12*wy1*(lambda5*(h*wy1*(wy1^2 + wz1^2)^2*(q21*wy1 + q31*wz1)*c2 - 2*wy1*c1^3*(q21*wy1 + q31*wz1)*c3 + c1^5*(h*q01*wy1 + 2*q21)*c3) + lambda6*(-h*wy1*(wy1^2 + wz1^2)^2*(q21*wz1 - q31*wy1)*c2 + 2*wy1*c1^3*(q21*wz1 - q31*wy1)*c3 +c1^5*(h*q11*wy1 + 2*q31)*c3) + lambda7*(-h*wy1*(wy1^2 + wz1^2)^2*(q01*wy1 - q11*wz1)*c2 + 2*wy1*c1^3*(q01*wy1 - q11*wz1)*c3 + c1^5*(h*q21*wy1 - 2*q01)*c3) + lambda8*(-h*wy1*(wy1^2 + wz1^2)^2*(q01*wz1 + q11*wy1)*c2 + 2*wy1*c1^3*(q01*wz1 + q11*wy1)*c3 + c1^5*(h*q31*wy1 - 2*q11)*c3) + 2*lambda9*(wy1^2 + wz1^2)^3) + (wy1^2 + wz1^2)*(lambda5*(-h^2*wy1^2*c1^3*(q21*wy1 + q31*wz1)*c3 + 2*h*q01*c1^5*c3 + 2*h*q21*wy1*(wy1^2 + wz1^2)^2*c2 + 6*h*wy1^2*(wy1^2 + wz1^2)*(q21*wy1 + q31*wz1)*c2 + h*wy1*(wy1^2 + wz1^2)^2*(h*q01*wy1 + 2*q21)*c2 + 2*h*(wy1^2 + wz1^2)^2*(q21*wy1 + q31*wz1)*c2 - 4*q21*wy1*c1^3*c3 - 12*wy1^2*c1*(q21*wy1 + q31*wz1)*c3 + 10*wy1*c1^3*(h*q01*wy1 + 2*q21)*c3 - 4*c1^3*(q21*wy1 + q31*wz1)*c3) + lambda6*(h^2*wy1^2*c1^3*(q21*wz1 - q31*wy1)*c3 + 2*h*q11*c1^5*c3 + 2*h*q31*wy1*(wy1^2 + wz1^2)^2*c2 - 6*h*wy1^2*(wy1^2 + wz1^2)*(q21*wz1 - q31*wy1)*c2 + h*wy1*(wy1^2 + wz1^2)^2*(h*q11*wy1 + 2*q31)*c2 - 2*h*(wy1^2 + wz1^2)^2*(q21*wz1 - q31*wy1)*c2 - 4*q31*wy1*c1^3*c3 + 12*wy1^2*c1*(q21*wz1 - q31*wy1)*c3 + 10*wy1*c1^3*(h*q11*wy1 + 2*q31)*c3 + 4*c1^3*(q21*wz1 - q31*wy1)*c3) + lambda7*(h^2*wy1^2*c1^3*(q01*wy1 - q11*wz1)*c3 - 2*h*q01*wy1*(wy1^2 + wz1^2)^2*c2 + 2*h*q21*c1^5*c3 - 6*h*wy1^2*(wy1^2 + wz1^2)*(q01*wy1 - q11*wz1)*c2 + h*wy1*(wy1^2 + wz1^2)^2*(h*q21*wy1 - 2*q01)*c2 - 2*h*(wy1^2 + wz1^2)^2*(q01*wy1 - q11*wz1)*c2 + 4*q01*wy1*c1^3*c3 + 12*wy1^2*c1*(q01*wy1 - q11*wz1)*c3 + 10*wy1*c1^3*(h*q21*wy1 - 2*q01)*c3 + 4*c1^3*(q01*wy1 - q11*wz1)*c3) + lambda8*(h^2*wy1^2*c1^3*(q01*wz1 + q11*wy1)*c3 - 2*h*q11*wy1*(wy1^2 + wz1^2)^2*c2 + 2*h*q31*c1^5*c3 - 6*h*wy1^2*(wy1^2 + wz1^2)*(q01*wz1 + q11*wy1)*c2 +h*wy1*(wy1^2 + wz1^2)^2*(h*q31*wy1 - 2*q11)*c2 - 2*h*(wy1^2 + wz1^2)^2*(q01*wz1 + q11*wy1)*c2 + 4*q11*wy1*c1^3*c3 + 12*wy1^2*c1*(q01*wz1 + q11*wy1)*c3 + 10*wy1*c1^3*(h*q31*wy1 - 2*q11)*c3 + 4*c1^3*(q01*wz1 + q11*wy1)*c3) + 24*lambda9*wy1*(wy1^2 + wz1^2)^2))/(4*(wy1^2 + wz1^2)^4);
-  hes_block(9,10) = (-12*wz1*(lambda5*(h*wy1*(wy1^2 + wz1^2)^2*(q21*wy1 + q31*wz1)*c2 - 2*wy1*c1^3*(q21*wy1 + q31*wz1)*c3 + c1^5*(h*q01*wy1 + 2*q21)*c3) + lambda6*(-h*wy1*(wy1^2 + wz1^2)^2*(q21*wz1 - q31*wy1)*c2 + 2*wy1*c1^3*(q21*wz1 - q31*wy1)*c3 + c1^5*(h*q11*wy1 + 2*q31)*c3) + lambda7*(-h*wy1*(wy1^2 + wz1^2)^2*(q01*wy1 - q11*wz1)*c2 + 2*wy1*c1^3*(q01*wy1 - q11*wz1)*c3 + c1^5*(h*q21*wy1 - 2*q01)*c3) + lambda8*(-h*wy1*(wy1^2 + wz1^2)^2*(q01*wz1 + q11*wy1)*c2 + 2*wy1*c1^3*(q01*wz1 + q11*wy1)*c3 + c1^5*(h*q31*wy1 - 2*q11)*c3) + 2*lambda9*(wy1^2+ wz1^2)^3) + (wy1^2 + wz1^2)*(lambda5*(-h^2*wy1*wz1*c1^3*(q21*wy1 + q31*wz1)*c3 + 2*h*q31*wy1*(wy1^2 + wz1^2)^2*c2 + 6*h*wy1*wz1*(wy1^2 + wz1^2)*(q21*wy1 + q31*wz1)*c2 + h*wz1*(wy1^2 + wz1^2)^2*(h*q01*wy1 + 2*q21)*c2 - 4*q31*wy1*c1^3*c3 - 12*wy1*wz1*c1*(q21*wy1 + q31*wz1)*c3 + 10*wz1*c1^3*(h*q01*wy1 + 2*q21)*c3) + lambda6*(h^2*wy1*wz1*c1^3*(q21*wz1 - q31*wy1)*c3 - 2*h*q21*wy1*(wy1^2 + wz1^2)^2*c2 - 6*h*wy1*wz1*(wy1^2 + wz1^2)*(q21*wz1 - q31*wy1)*c2 + h*wz1*(wy1^2 + wz1^2)^2*(h*q11*wy1 + 2*q31)*c2 + 4*q21*wy1*c1^3*c3 + 12*wy1*wz1*c1*(q21*wz1 - q31*wy1)*c3 + 10*wz1*c1^3*(h*q11*wy1 + 2*q31)*c3) + lambda7*(h^2*wy1*wz1*c1^3*(q01*wy1 - q11*wz1)*c3 + 2*h*q11*wy1*(wy1^2 + wz1^2)^2*c2 - 6*h*wy1*wz1*(wy1^2 + wz1^2)*(q01*wy1 - q11*wz1)*c2 + h*wz1*(wy1^2 + wz1^2)^2*(h*q21*wy1 - 2*q01)*c2 - 4*q11*wy1*c1^3*c3 + 12*wy1*wz1*c1*(q01*wy1 - q11*wz1)*c3 + 10*wz1*c1^3*(h*q21*wy1 - 2*q01)*c3) + lambda8*(h^2*wy1*wz1*c1^3*(q01*wz1 + q11*wy1)*c3 - 2*h*q01*wy1*(wy1^2 + wz1^2)^2*c2 - 6*h*wy1*wz1*(wy1^2 + wz1^2)*(q01*wz1 + q11*wy1)*c2 + h*wz1*(wy1^2 + wz1^2)^2*(h*q31*wy1 - 2*q11)*c2 + 4*q01*wy1*c1^3*c3 + 12*wy1*wz1*c1*(q01*wz1 + q11*wy1)*c3 + 10*wz1*c1^3*(h*q31*wy1 - 2*q11)*c3) + 24*lambda9*wz1*(wy1^2 + wz1^2)^2))/(4*(wy1^2 + wz1^2)^4);
-
-  hes_block(10,5) = hes_block(5,10);
-  hes_block(10,6) = hes_block(6,10);
-  hes_block(10,7) = hes_block(7,10);
-  hes_block(10,8) = hes_block(8,10);
-  hes_block(10,9) = hes_block(9,10);
-  hes_block(10,10) = (-12*wz1*(2*lambda10*(wy1^2 + wz1^2)^3 + lambda5*(h*wz1*(wy1^2 + wz1^2)^2*(q21*wy1 + q31*wz1)*c2 - 2*wz1*c1^3*(q21*wy1 + q31*wz1)*c3 + c1^5*(h*q01*wz1 + 2*q31)*c3) + lambda6*(-h*wz1*(wy1^2 + wz1^2)^2*(q21*wz1 - q31*wy1)*c2 + 2*wz1*c1^3*(q21*wz1 - q31*wy1)*c3 + c1^5*(h*q11*wz1 - 2*q21)*c3) + lambda7*(-h*wz1*(wy1^2 + wz1^2)^2*(q01*wy1 - q11*wz1)*c2 + 2*wz1*c1^3*(q01*wy1 - q11*wz1)*c3 + c1^5*(h*q21*wz1 + 2*q11)*c3) + lambda8*(-h*wz1*(wy1^2 + wz1^2)^2*(q01*wz1 + q11*wy1)*c2 + 2*wz1*c1^3*(q01*wz1 + q11*wy1)*c3 + c1^5*(h*q31*wz1 - 2*q01)*c3)) + (wy1^2 + wz1^2)*(24*lambda10*wz1*(wy1^2 + wz1^2)^2 + lambda5*(-h^2*wz1^2*c1^3*(q21*wy1 + q31*wz1)*c3 + 2*h*q01*c1^5*c3 + 2*h*q31*wz1*(wy1^2 + wz1^2)^2*c2 + 6*h*wz1^2*(wy1^2 + wz1^2)*(q21*wy1 + q31*wz1)*c2 + h*wz1*(wy1^2 + wz1^2)^2*(h*q01*wz1 + 2*q31)*c2 + 2*h*(wy1^2 + wz1^2)^2*(q21*wy1 + q31*wz1)*c2 - 4*q31*wz1*c1^3*c3 - 12*wz1^2*c1*(q21*wy1 + q31*wz1)*c3 + 10*wz1*c1^3*(h*q01*wz1 + 2*q31)*c3 - 4*c1^3*(q21*wy1 + q31*wz1)*c3) + lambda6*(h^2*wz1^2*c1^3*(q21*wz1 - q31*wy1)*c3 + 2*h*q11*c1^5*c3 - 2*h*q21*wz1*(wy1^2 + wz1^2)^2*c2 - 6*h*wz1^2*(wy1^2 + wz1^2)*(q21*wz1 - q31*wy1)*c2 + h*wz1*(wy1^2 + wz1^2)^2*(h*q11*wz1 - 2*q21)*c2 - 2*h*(wy1^2 + wz1^2)^2*(q21*wz1 - q31*wy1)*c2 + 4*q21*wz1*c1^3*c3 + 12*wz1^2*c1*(q21*wz1 - q31*wy1)*c3 + 10*wz1*c1^3*(h*q11*wz1 - 2*q21)*c3 + 4*c1^3*(q21*wz1 - q31*wy1)*c3) + lambda7*(h^2*wz1^2*c1^3*(q01*wy1 - q11*wz1)*c3 + 2*h*q11*wz1*(wy1^2 + wz1^2)^2*c2 + 2*h*q21*c1^5*c3 - 6*h*wz1^2*(wy1^2 + wz1^2)*(q01*wy1 - q11*wz1)*c2 + h*wz1*(wy1^2 + wz1^2)^2*(h*q21*wz1 + 2*q11)*c2 - 2*h*(wy1^2 + wz1^2)^2*(q01*wy1 - q11*wz1)*c2 - 4*q11*wz1*c1^3*c3 + 12*wz1^2*c1*(q01*wy1 - q11*wz1)*c3 + 10*wz1*c1^3*(h*q21*wz1 + 2*q11)*c3 + 4*c1^3*(q01*wy1 - q11*wz1)*c3) + lambda8*(h^2*wz1^2*c1^3*(q01*wz1 + q11*wy1)*c3 - 2*h*q01*wz1*(wy1^2 + wz1^2)^2*c2 + 2*h*q31*c1^5*c3 - 6*h*wz1^2*(wy1^2 + wz1^2)*(q01*wz1 +q11*wy1)*c2 + h*wz1*(wy1^2 + wz1^2)^2*(h*q31*wz1 - 2*q01)*c2 - 2*h*(wy1^2 + wz1^2)^2*(q01*wz1 + q11*wy1)*c2 + 4*q01*wz1*c1^3*c3 + 12*wz1^2*c1*(q01*wz1 + q11*wy1)*c3 + 10*wz1*c1^3*(h*q31*wz1 - 2*q01)*c3 + 4*c1^3*(q01*wz1 + q11*wy1)*c3)))/(4*(wy1^2 + wz1^2)^4);
 
   hes_block(11,3) = hes_block(3,11);
   hes_block(11,4) = hes_block(4,11);
