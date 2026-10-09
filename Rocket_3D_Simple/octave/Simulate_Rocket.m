@@ -102,14 +102,14 @@ function [dx, w] = get_dx(z_knot, knot_params)
   q3 = z_knot(8);
   wy = z_knot(9);
   wz = z_knot(10);
-  Cly = z_knot(11);
-  Clz = z_knot(12);
+  c_L = z_knot(11);
+  sig = z_knot(12);
 
   q = [q0 q1 q2 q3];
 
   D = 0.5*knot_params.rho*A*knot_params.c_D*s*s;
-  az = 0.5*knot_params.rho*A*Clz*s*s/knot_params.m;
-  ay = 0.5*knot_params.rho*A*Cly*s*s/knot_params.m;
+  az = 0.5*knot_params.rho*A*cos(sig)*c_L*s*s/knot_params.m;
+  ay = 0.5*knot_params.rho*A*sin(sig)*c_L*s*s/knot_params.m;
 
   wy = (-az - knot_params.g*(-2*q1^2 - 2*q2^2 + 1))/s;
   wz = (ay + 2*knot_params.g*(q0*q1 + q2*q3))/s;
@@ -201,8 +201,8 @@ for i = 1:O.N_knots-1
   params_knot = get_knot_params(z_knot, O.t(i));
   z_next = O.z(knot_end+1:O.knot_size*(i+1));
   z_next(1:8) = z_knot(1:8);
-  z_next(11) = 0.0;
-  z_next(12) = -0.1;
+  z_next(11) = 0.1;
+  z_next(12) = pi;
   params_next = get_knot_params(z_next, O.t(i+1));
   dt = O.t(i+1) - O.t(i);
   for j = 1:5

@@ -14,7 +14,7 @@ clc
 
 pkg load symbolic
 
-function [dx, w] = get_dx1(pn1, pe1, pd1, s1, q01, q11, q21, q31, wy1, wz1, Cly1, Clz1)
+function [dx, w] = get_dx1(pn1, pe1, pd1, s1, q01, q11, q21, q31, wy1, wz1, c_L1, sig1)
   syms c_D(s1) rho(pd1) A g T1 m1
 
   q = [q01; q11; q21; q31];
@@ -27,11 +27,11 @@ function [dx, w] = get_dx1(pn1, pe1, pd1, s1, q01, q11, q21, q31, wy1, wz1, Cly1
   dx(4) = ((T1 - D)/m1) + 2*g*(-q01*q21 + q11*q31);
   dx(5:8) = 0.5.*omega*q;
 
-  w = [(-(0.5*rho(pd1)*A*Clz1*s1*s1/m1) - g*(-2*q11^2 - 2*q21^2 + 1))/s1;...
-       ((0.5*rho(pd1)*A*Cly1*s1*s1/m1) + 2*g*(q01*q11 + q21*q31))/s1];
+  w = [(-(0.5*rho(pd1)*A*cos(sig1)*c_L1*s1*s1/m1) - g*(-2*q11^2 - 2*q21^2 + 1))/s1;...
+       ((0.5*rho(pd1)*A*sin(sig1)*c_L1*s1*s1/m1) + 2*g*(q01*q11 + q21*q31))/s1];
 end
 
-function [dx, w] = get_dx2(pn2, pe2, pd2, s2, q02, q12, q22, q32, wy2, wz2, Cly2, Clz2)
+function [dx, w] = get_dx2(pn2, pe2, pd2, s2, q02, q12, q22, q32, wy2, wz2, c_L2, sig2)
   syms c_D(s2) rho(pd2) A g T2 m2
 
   q = [q02; q12; q22; q32];
@@ -44,8 +44,8 @@ function [dx, w] = get_dx2(pn2, pe2, pd2, s2, q02, q12, q22, q32, wy2, wz2, Cly2
   dx(4) = ((T2 - D)/m2) + 2*g*(-q02*q22 + q12*q32);
   dx(5:8) = 0.5.*omega*q;
 
-  w = [(-(0.5*rho(pd2)*A*Clz2*s2*s2/m2) - g*(-2*q12^2 - 2*q22^2 + 1))/s2;...
-       ((0.5*rho(pd2)*A*Cly2*s2*s2/m2) + 2*g*(q02*q12 + q22*q32))/s2];
+  w = [(-(0.5*rho(pd2)*A*cos(sig2)*c_L2*s2*s2/m2) - g*(-2*q12^2 - 2*q22^2 + 1))/s2;...
+       ((0.5*rho(pd2)*A*sin(sig2)*c_L2*s2*s2/m2) + 2*g*(q02*q12 + q22*q32))/s2];
 end
 
 function c = get_constraints_first_knot(states, inputs, ic)
@@ -61,8 +61,8 @@ function c = get_constraints_first_knot(states, inputs, ic)
   q31 = states(1,8);
   wy1 = states(1,9);
   wz1 = states(1,10);
-  Cly1 = inputs(1,1);
-  Clz1 = inputs(1,2);
+  c_L1 = inputs(1,1);
+  sig1 = inputs(1,2);
   pn_ic = ic(1);
   pe_ic = ic(2);
   pd_ic = ic(3);
@@ -82,12 +82,12 @@ function c = get_constraints_first_knot(states, inputs, ic)
   q32 = states(2,8);
   wy2 = states(2,9);
   wz2 = states(2,10);
-  Cly2 = inputs(2,1);
-  Clz2 = inputs(2,2);
+  c_L2 = inputs(2,1);
+  sig2 = inputs(2,2);
 
-  [dx1, w_guess] = get_dx1(pn1, pe1, pd1, s1, q01, q11, q21, q31, wy1, wz1, Cly1, Clz1);
+  [dx1, w_guess] = get_dx1(pn1, pe1, pd1, s1, q01, q11, q21, q31, wy1, wz1, c_L1, sig1);
   dx1 = simplify(dx1);
-  [dx2, w_guess2] = get_dx2(pn2, pe2, pd2, s2, q02, q12, q22, q32, wy2, wz2, Cly2, Clz2);
+  [dx2, w_guess2] = get_dx2(pn2, pe2, pd2, s2, q02, q12, q22, q32, wy2, wz2, c_L2, sig2);
   dx2 = simplify(dx2);
 
   w = [wy1 wz1];
@@ -136,8 +136,8 @@ function c = get_constraints_middle_knot(states, inputs)
   q31 = states(1,8);
   wy1 = states(1,9);
   wz1 = states(1,10);
-  Cly1 = inputs(1,1);
-  Clz1 = inputs(1,2);
+  c_L1 = inputs(1,1);
+  sig1 = inputs(1,2);
 
   pn2 = states(2,1);
   pe2 = states(2,2);
@@ -149,12 +149,12 @@ function c = get_constraints_middle_knot(states, inputs)
   q32 = states(2,8);
   wy2 = states(2,9);
   wz2 = states(2,10);
-  Cly2 = inputs(2,1);
-  Clz2 = inputs(2,2);
+  c_L2 = inputs(2,1);
+  sig2 = inputs(2,2);
 
-  [dx1, w_guess] = get_dx1(pn1, pe1, pd1, s1, q01, q11, q21, q31, wy1, wz1, Cly1, Clz1);
+  [dx1, w_guess] = get_dx1(pn1, pe1, pd1, s1, q01, q11, q21, q31, wy1, wz1, c_L1, sig1);
   dx1 = simplify(dx1);
-  [dx2, w_guess2] = get_dx2(pn2, pe2, pd2, s2, q02, q12, q22, q32, wy2, wz2, Cly2, Clz2);
+  [dx2, w_guess2] = get_dx2(pn2, pe2, pd2, s2, q02, q12, q22, q32, wy2, wz2, c_L2, sig2);
   dx2 = simplify(dx2);
 
   w = [wy1 wz1];
@@ -198,8 +198,8 @@ function j = get_trapezoidal_integration(states, inputs)
   q31 = states(1,8);
   wy1 = states(1,9);
   wz1 = states(1,10);
-  Cly1 = inputs(1,1);
-  Clz1 = inputs(1,2);
+  c_L1 = inputs(1,1);
+  sig1 = inputs(1,2);
 
   pn2 = states(2,1);
   pe2 = states(2,2);
@@ -211,12 +211,12 @@ function j = get_trapezoidal_integration(states, inputs)
   q32 = states(2,8);
   wy2 = states(2,9);
   wz2 = states(2,10);
-  Cly2 = inputs(2,1);
-  Clz2 = inputs(2,2);
+  c_L2 = inputs(2,1);
+  sig2 = inputs(2,2);
 
-  [dx1, w_guess] = get_dx1(pn1, pe1, pd1, s1, q01, q11, q21, q31, wy1, wz1, Cly1, Clz1);
+  [dx1, w_guess] = get_dx1(pn1, pe1, pd1, s1, q01, q11, q21, q31, wy1, wz1, c_L1, sig1);
   dx1 = simplify(dx1);
-  [dx2, w_guess2] = get_dx2(pn2, pe2, pd2, s2, q02, q12, q22, q32, wy2, wz2, Cly2, Clz2);
+  [dx2, w_guess2] = get_dx2(pn2, pe2, pd2, s2, q02, q12, q22, q32, wy2, wz2, c_L2, sig2);
   dx2 = simplify(dx2);
 
   w = [wy1 wz1];
@@ -272,21 +272,21 @@ function lagrangian = get_lagrangian_middle_knot(states, inputs, lbs, ubs)
   lagrangian = cost + lambda*cm;
 end
 
-syms pn1 pe1 pd1 s1 q01 q11 q21 q31 wy1 wz1 Cly1 Clz1...
-     pn2 pe2 pd2 s2 q02 q12 q22 q32 wy2 wz2 Cly2 Clz2...
-     lb_Cly lb_Clz ub_pd ub_Cly ub_Clz...
+syms pn1 pe1 pd1 s1 q01 q11 q21 q31 wy1 wz1 c_L1 sig1...
+     pn2 pe2 pd2 s2 q02 q12 q22 q32 wy2 wz2 c_L2 sig2...
+     lb_c_L lb_sig ub_pd ub_c_L ub_sig...
      pn_ic pe_ic pd_ic s_ic q0_ic q1_ic q2_ic q3_ic xd1 xd2 xd3 real
 
 states = [pn1 pe1 pd1 s1 q01 q11 q21 q31 wy1 wz1;...
           pn2 pe2 pd2 s2 q02 q12 q22 q32 wy2 wz2];
-inputs = [Cly1 Clz1;...
-          Cly2 Clz2];
-lbs = [lb_Cly lb_Clz];
-ubs = [ub_pd ub_Cly ub_Clz];
+inputs = [c_L1 sig1;...
+          c_L2 sig2];
+lbs = [lb_c_L lb_sig];
+ubs = [ub_pd ub_c_L ub_sig];
 ic = [pn_ic pe_ic pd_ic s_ic q0_ic q1_ic q2_ic q3_ic];
 xd = [xd1 xd2 xd3];
 
-##z = [pn1 pe1 pd1 s1 q01 q11 q21 q31 wy1 wz1 Cly1 Clz1 pn2 pe2 pd2 s2 q02 q12 q22 q32 wy2 wz2 Cly2 Clz2];
+z = [pn1 pe1 pd1 s1 q01 q11 q21 q31 wy1 wz1 c_L1 sig1 pn2 pe2 pd2 s2 q02 q12 q22 q32 wy2 wz2 c_L2 sig2];
 
 ##cf = simplify(get_constraints_first_knot(states, inputs, ic));
 
@@ -294,14 +294,13 @@ xd = [xd1 xd2 xd3];
 ##
 ##ce = simplify(get_constraints_end_knot(states, inputs));
 
-##Lf = get_lagrangian_first_knot(states, inputs, lbs, ubs, ic);
+Lf = get_lagrangian_first_knot(states, inputs, lbs, ubs, ic);
 
 ##Lm = simplify(get_lagrangian_middle_knot(states, inputs, lbs, ubs));
 
-J = get_trapezoidal_integration(states, inputs);
+##J = get_trapezoidal_integration(states, inputs);
 
 clc
-##disp(cf)
 ##for i = 1:length(cf)
 ##  for j = 1:length(z)
 ##    block_con = simplify(diff(cf(i), z(j)));
@@ -322,7 +321,7 @@ clc
 ##end
 ##fprintf('\n\n\n')
 ##
-##z = [pn1 pe1 pd1 s1 q01 q11 q21 q31 wy1 wz1 Cly1 Clz1 s_Cly_lb s_Clz_lb s_pd_ub s_Cly_ub s_Clz_ub];
+##z = [pn1 pe1 pd1 s1 q01 q11 q21 q31 wy1 wz1 Cly1 Clz1];
 ##for i = 1:length(ce)
 ##  for j = 1:length(z)
 ##    block_con = simplify(diff(ce(i), z(j)));
@@ -333,21 +332,21 @@ clc
 ##end
 ##fprintf('\n\n\n')
 
-##z = [pn1 pe1 pd1 s1 q01 q11 q21 q31 wy1 wz1 Cly1 Clz1];
-##fprintf('\n\n\n')
-##for i = 1:length(z)
-##  dif1 = simplify(diff(Lf, z(i)));
-##  for j = 1:length(z)
-##    blocklf = simplify(diff(dif1, z(j)));
-##    if blocklf ~= 0
-##      if i > j
-##        fprintf('hes_block(%d,%d) = hes_block(%d,%d);\n',i,j,j,i);
-##      else
-##        fprintf('hes_block(%d,%d) = %s;\n',i,j,char(blocklf));
-##      end
-##    end
-##  end
-##end
+z = [pn1 pe1 pd1 s1 q01 q11 q21 q31 wy1 wz1 c_L1 sig1];
+fprintf('\n\n\n')
+for i = 1:length(z)
+  dif1 = simplify(diff(Lf, z(i)));
+  for j = 1:length(z)
+    blocklf = simplify(diff(dif1, z(j)));
+    if blocklf ~= 0
+      if i > j
+        fprintf('hes_block(%d,%d) = hes_block(%d,%d);\n',i,j,j,i);
+      else
+        fprintf('hes_block(%d,%d) = %s;\n',i,j,char(blocklf));
+      end
+    end
+  end
+end
 
 ##fprintf('\n\n\n')
 ##for i = 1:length(z)
@@ -364,13 +363,13 @@ clc
 ##  end
 ##end
 
-z = [pn2 pe2 pd2 s2 q02 q12 q22 q32];
-for i = 1:length(J)
-  for j = 1:length(z)
-    block_con = simplify(diff(J(i), z(j)));
-    if block_con ~= 0
-      fprintf('jac(%d,%d) = %s;\n',i,j,char(block_con));
-    end
-  end
-end
-fprintf('\n\n\n')
+##z = [pn2 pe2 pd2 s2 q02 q12 q22 q32];
+##for i = 1:length(J)
+##  for j = 1:length(z)
+##    block_con = simplify(diff(J(i), z(j)));
+##    if block_con ~= 0
+##      fprintf('jac(%d,%d) = %s;\n',i,j,char(block_con));
+##    end
+##  end
+##end
+##fprintf('\n\n\n')
