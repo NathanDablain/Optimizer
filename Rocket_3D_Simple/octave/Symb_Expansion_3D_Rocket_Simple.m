@@ -48,7 +48,7 @@ function [dx, w] = get_dx2(pn2, pe2, pd2, s2, q02, q12, q22, q32, wy2, wz2, Cly2
        ((0.5*rho(pd2)*A*Cly2*s2*s2/m2) + 2*g*(q02*q12 + q22*q32))/s2];
 end
 
-function c = get_constraints_first_knot(states, inputs, slack, lbs, ubs, ic)
+function c = get_constraints_first_knot(states, inputs, ic)
   syms h g;
 
   pn1 = states(1,1);
@@ -90,8 +90,6 @@ function c = get_constraints_first_knot(states, inputs, slack, lbs, ubs, ic)
   [dx2, w_guess2] = get_dx2(pn2, pe2, pd2, s2, q02, q12, q22, q32, wy2, wz2, Cly2, Clz2);
   dx2 = simplify(dx2);
 
-##  wy = 0.5*(wy1 + wy2);
-##  wz = 0.5*(wz1 + wz2);
   w = [wy1 wz1];
 
   theta = norm(w)*h;
@@ -125,7 +123,7 @@ function c = get_constraints_first_knot(states, inputs, slack, lbs, ubs, ic)
     q3_ic - q31];
 end
 
-function c = get_constraints_middle_knot(states, inputs, slack, lbs, ubs)
+function c = get_constraints_middle_knot(states, inputs)
   syms h g;
 
   pn1 = states(1,1);
@@ -159,8 +157,6 @@ function c = get_constraints_middle_knot(states, inputs, slack, lbs, ubs)
   [dx2, w_guess2] = get_dx2(pn2, pe2, pd2, s2, q02, q12, q22, q32, wy2, wz2, Cly2, Clz2);
   dx2 = simplify(dx2);
 
-##  wy = 0.5*(wy1 + wy2);
-##  wz = 0.5*(wz1 + wz2);
   w = [wy1 wz1];
 
   theta = norm(w)*h;
@@ -184,21 +180,7 @@ function c = get_constraints_middle_knot(states, inputs, slack, lbs, ubs)
     wz1 - 0.5*h*(w_guess(2) + w_guess2(2))];
 end
 
-function c = get_constraints_end_knot(states, inputs, slack, lbs, ubs)
-  syms h g;
-
-  pn1 = states(1,1);
-  pe1 = states(1,2);
-  pd1 = states(1,3);
-  s1 = states(1,4);
-  q01 = states(1,5);
-  q11 = states(1,6);
-  q21 = states(1,7);
-  q31 = states(1,8);
-  wy1 = states(1,9);
-  wz1 = states(1,10);
-  Cly1 = inputs(1,1);
-  Clz1 = inputs(1,2);
+function c = get_constraints_end_knot(states, inputs)
 
   c = [];
 end
@@ -257,7 +239,7 @@ function j = get_trapezoidal_integration(states, inputs)
     constraint(4)];
 end
 
-function lagrangian = get_lagrangian_first_knot(states, inputs, slack, lbs, ubs, ic)
+function lagrangian = get_lagrangian_first_knot(states, inputs, lbs, ubs, ic)
   syms mu lambda1 lambda2 lambda3 lambda4 lambda5 lambda6 lambda7...
           lambda8 lambda9 lambda10 lambda11 lambda12 lambda13 lambda14...
           lambda15 lambda16 lambda17 lambda18 real;
@@ -271,29 +253,27 @@ function lagrangian = get_lagrangian_first_knot(states, inputs, slack, lbs, ubs,
                   log(ubs(2) - inputs(1,1)) +...
                   log(ubs(3) - inputs(1,2)));
 
-  cf = get_constraints_first_knot(states, inputs, slack, lbs, ubs, ic);
+  cf = get_constraints_first_knot(states, inputs, ic);
   lagrangian = cost + lambda*cf;
 end
 
-function lagrangian = get_lagrangian_middle_knot(states, inputs, slack, lbs, ubs)
+function lagrangian = get_lagrangian_middle_knot(states, inputs, lbs, ubs)
   syms mu mu_q lambda1 lambda2 lambda3 lambda4 lambda5 lambda6 lambda7...
           lambda8 lambda9 lambda10 real;
 
   lambda = [lambda1 lambda2 lambda3 lambda4 lambda5 lambda6 lambda7...
             lambda8 lambda9 lambda10];
-##  cost = -mu*(log(slack(1)) + log(slack(2)) + log(slack(3)) + log(slack(4)) + log(slack(5)));
   cost = -mu*(log(inputs(1,1) - lbs(1)) +...
                   log(inputs(1,2) - lbs(2)) +...
                   log(ubs(2) - inputs(1,1)) +...
                   log(ubs(3) - inputs(1,2))) +...
           mu_q*(states(1,5)^2 + states(1,6)^2 + states(1,7)^2 + states(1,8)^2 - 1);
-  cm = get_constraints_middle_knot(states, inputs, slack, lbs, ubs);
+  cm = get_constraints_middle_knot(states, inputs);
   lagrangian = cost + lambda*cm;
 end
 
 syms pn1 pe1 pd1 s1 q01 q11 q21 q31 wy1 wz1 Cly1 Clz1...
      pn2 pe2 pd2 s2 q02 q12 q22 q32 wy2 wz2 Cly2 Clz2...
-     s_Cly_lb s_Clz_lb s_pd_ub s_Cly_ub s_Clz_ub...
      lb_Cly lb_Clz ub_pd ub_Cly ub_Clz...
      pn_ic pe_ic pd_ic s_ic q0_ic q1_ic q2_ic q3_ic xd1 xd2 xd3 real
 
@@ -301,7 +281,6 @@ states = [pn1 pe1 pd1 s1 q01 q11 q21 q31 wy1 wz1;...
           pn2 pe2 pd2 s2 q02 q12 q22 q32 wy2 wz2];
 inputs = [Cly1 Clz1;...
           Cly2 Clz2];
-slack = [s_Cly_lb s_Clz_lb s_pd_ub s_Cly_ub s_Clz_ub];
 lbs = [lb_Cly lb_Clz];
 ubs = [ub_pd ub_Cly ub_Clz];
 ic = [pn_ic pe_ic pd_ic s_ic q0_ic q1_ic q2_ic q3_ic];
@@ -309,15 +288,15 @@ xd = [xd1 xd2 xd3];
 
 ##z = [pn1 pe1 pd1 s1 q01 q11 q21 q31 wy1 wz1 Cly1 Clz1 pn2 pe2 pd2 s2 q02 q12 q22 q32 wy2 wz2 Cly2 Clz2];
 
-##cf = simplify(get_constraints_first_knot(states, inputs, slack, lbs, ubs, ic));
+##cf = simplify(get_constraints_first_knot(states, inputs, ic));
 
-##cm = simplify(get_constraints_middle_knot(states, inputs, slack, lbs, ubs));
+##cm = simplify(get_constraints_middle_knot(states, inputs));
 ##
-##ce = simplify(get_constraints_end_knot(states, inputs, slack, lbs, ubs));
+##ce = simplify(get_constraints_end_knot(states, inputs));
 
-##Lf = get_lagrangian_first_knot(states, inputs, slack, lbs, ubs, ic);
+##Lf = get_lagrangian_first_knot(states, inputs, lbs, ubs, ic);
 
-##Lm = simplify(get_lagrangian_middle_knot(states, inputs, slack, lbs, ubs));
+##Lm = simplify(get_lagrangian_middle_knot(states, inputs, lbs, ubs));
 
 J = get_trapezoidal_integration(states, inputs);
 
