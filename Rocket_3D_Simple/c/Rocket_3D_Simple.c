@@ -13,8 +13,10 @@ const double initial_hdg = 0.0;
 const double Shooting_c_L_z = -0.1;
 const double ic[8] = {0.0, 0.0, -100.0, 50.0, 0.0, 0.0, 0.0, 0.0};
 const double xd[3] = {800.0, 200.0, -300.0};
-const double c_L_lb = -1.5;
+const double c_L_lb = 0.0;
 const double c_L_ub = 1.5;
+const double sig_lb = 0.0 - M_PI/12.0;
+const double sig_ub = 2.0*M_PI + M_PI/12.0;
 const double p_d_ub = 0.0;
 const double tf = 10.0;
 const double mu = 1.0e-2;
@@ -49,14 +51,14 @@ knots problem;
 // 1 -> East position,
 // 2 -> Down position,
 // 3 -> Speed,
-// 4 -> NED to velocity quaternion scalar
-// 5 -> NED to velocity quaternion imaginary x
-// 6 -> NED to velocity quaternion imaginary y
-// 7 -> NED to velocity quaternion imaginary z
-// 8 -> wy
-// 9 -> wz
-// 10 -> c_Ly
-// 11 -> c_Lz
+// 4 -> NED to velocity quaternion scalar,
+// 5 -> NED to velocity quaternion imaginary x,
+// 6 -> NED to velocity quaternion imaginary y,
+// 7 -> NED to velocity quaternion imaginary z,
+// 8 -> wy,
+// 9 -> wz,
+// 10 -> c_L,
+// 11 -> Bank angle
 
 double Get_tf(){
     return tf;

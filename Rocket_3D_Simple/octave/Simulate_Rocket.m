@@ -83,7 +83,7 @@ function knot_params = get_knot_params(z_knot, t_knot)
 
   % Made up thrust mass tables to take us supersonic
   t_table = [0 0.2  0.5  2.5 3   3.25 4   6   8  10  11  12   13 13.5];
-  T_table = 30.*[0 300 1000 1000 800 600 550 525 500 450 350 250 100 0];
+  T_table = 5.*[0 300 1000 1000 800 600 550 525 500 450 350 250 100 0];
   m_table = [15 14.92 14.52 11.8533 11.32 11.12 10.57 9.17 7.8367 6.6367 6.17 5.8367 5.7033 5.7033];
   if t_knot >= t_table(end)
     knot_params.T = T_table(end);

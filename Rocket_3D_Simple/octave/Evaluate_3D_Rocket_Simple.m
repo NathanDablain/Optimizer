@@ -24,7 +24,8 @@ hessian = [];
 
   mu = 5.0e-2;
   mu_q = 1.0;
-  q_speed = 0.001;
+  q_speed = 0.00;
+  q_final = 1.0;
   function contribution = get_first_knot_cost(z_knot, lb, ub)
 
     contribution = -mu*(log(z_knot(11) - lb(1)) +...
@@ -44,9 +45,9 @@ hessian = [];
   end
 
   function contribution = get_end_knot_cost(z_knot, xd, lb, ub)
-    contribution = (z_knot(1) - xd(1))^2 +...
+    contribution = q_final*((z_knot(1) - xd(1))^2 +...
                    (z_knot(2) - xd(2))^2 +...
-                   (z_knot(3) - xd(3))^2 -...
+                   (z_knot(3) - xd(3))^2) -...
                    q_speed*z_knot(4)^2 -...
                    mu*(log(z_knot(11) - lb(1)) +...
                        log(z_knot(12) - lb(2)) +...
@@ -98,9 +99,9 @@ end
 
 function grad_vec = get_end_knot_grad(z_knot, xd, lb, ub)
   grad_vec = zeros(length(z_knot), 1);
-  grad_vec(1) = 2.0 * z_knot(1) - 2.0 * xd(1);
-  grad_vec(2) = 2.0 * z_knot(2) - 2.0 * xd(2);
-  grad_vec(3) = 2.0 * z_knot(3) - 2.0 * xd(3) - mu/(z_knot(3) - ub(1));
+  grad_vec(1) = q_final*2.0*(z_knot(1) - xd(1));
+  grad_vec(2) = q_final*2.0*(z_knot(2) - xd(2));
+  grad_vec(3) = q_final*2.0*(z_knot(3) - xd(3)) - mu/(z_knot(3) - ub(1));
   grad_vec(4) = -2.0*q_speed*z_knot(4);
   grad_vec(5) = mu_q*4.0*z_knot(5)*(norm(z_knot(5:8)) - 1);
   grad_vec(6) = mu_q*4.0*z_knot(6)*(norm(z_knot(5:8)) - 1);
@@ -216,7 +217,7 @@ function knot_params = get_knot_params(z_knot, t_knot)
   knot_params.rho_part_h2 = - knot_params.rho_part_h2;
   % Made up thrust mass tables to take us supersonic
   t_table = [0 0.2  0.5  2.5 3   3.25 4   6   8  10  11  12   13 13.5];
-  T_table = 30.*[0 300 1000 1000 800 600 550 525 500 450 350 250 100 0];
+  T_table = 5.*[0 300 1000 1000 800 600 550 525 500 450 350 250 100 0];
   m_table = [15 14.92 14.52 11.8533 11.32 11.12 10.57 9.17 7.8367 6.6367 6.17 5.8367 5.7033 5.7033];
   if t_knot >= t_table(end)
     knot_params.T = T_table(end);
@@ -1026,11 +1027,11 @@ function hes_block = get_end_knot_hes(z_knot, t_knot, knot_params, lambda_knot, 
   lambda9 = lambda_last(9);
   lambda10 = lambda_last(10);
 
-  hes_block(1,1) = 2;
+  hes_block(1,1) = 2*q_final;
 
-  hes_block(2,2) = 2;
+  hes_block(2,2) = 2*q_final;
 
-  hes_block(3,3) = 2.0 + A*s1*(-c_L1*pi_AR_e*(lambda10*sin(sig1) - lambda9*cos(sig1)) + h*lambda4*s1*(c_L1^2 + pi_AR_e*c_D1))*rho_part_h2/(4*m1*pi_AR_e) + (mu/(pd1 - ub_pd)^2);
+  hes_block(3,3) = 2*q_final + A*s1*(-c_L1*pi_AR_e*(lambda10*sin(sig1) - lambda9*cos(sig1)) + h*lambda4*s1*(c_L1^2 + pi_AR_e*c_D1))*rho_part_h2/(4*m1*pi_AR_e) + (mu/(pd1 - ub_pd)^2);
   hes_block(3,4) = A*(-c_L1*pi_AR_e*(lambda10*sin(sig1) - lambda9*cos(sig1)) + h*lambda4*pi_AR_e*s1^2*c_D_part_s + 2*h*lambda4*s1*(c_L1^2+ pi_AR_e*c_D1))*rho_part_h/(4*m1*pi_AR_e);
   hes_block(3,11) = A*s1*(2*c_L1*h*lambda4*s1 - pi_AR_e*(lambda10*sin(sig1) - lambda9*cos(sig1)))*rho_part_h/(4*m1*pi_AR_e);
   hes_block(3,12) = -A*c_L1*s1*(lambda10*cos(sig1) + lambda9*sin(sig1))*rho_part_h/(4*m1);
