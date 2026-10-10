@@ -15,10 +15,10 @@ clc
 pkg load symbolic
 
 function [dx, w] = get_dx1(pn1, pe1, pd1, s1, q01, q11, q21, q31, wy1, wz1, c_L1, sig1)
-  syms c_D(s1) rho(pd1) A g T1 m1
+  syms c_D(s1) rho(pd1) A g T1 m1 pi_AR_e
 
   q = [q01; q11; q21; q31];
-  D = 0.5*rho(pd1)*A*c_D(s1)*s1*s1;
+  D = 0.5*rho(pd1)*A*(c_D(s1) + (c_L1^2/pi_AR_e))*s1*s1;
 
   v_NED = [s1*(-2*q21^2 - 2*q31^2 + 1); 2*s1*(q01*q31 + q11*q21); 2*s1*(-q01*q21 + q11*q31)];
   omega = [[0 0 -wy1 -wz1]; [0 0 wz1 -wy1]; [wy1 -wz1 0 0]; [wz1 wy1 0 0]];
@@ -32,10 +32,10 @@ function [dx, w] = get_dx1(pn1, pe1, pd1, s1, q01, q11, q21, q31, wy1, wz1, c_L1
 end
 
 function [dx, w] = get_dx2(pn2, pe2, pd2, s2, q02, q12, q22, q32, wy2, wz2, c_L2, sig2)
-  syms c_D(s2) rho(pd2) A g T2 m2
+  syms c_D(s2) rho(pd2) A g T2 m2 pi_AR_e
 
   q = [q02; q12; q22; q32];
-  D = 0.5*rho(pd2)*A*c_D(s2)*s2*s2;
+  D = 0.5*rho(pd2)*A*(c_D(s2) + (c_L2^2/pi_AR_e))*s2*s2;
 
   v_NED = [s2*(-2*q22^2 - 2*q32^2 + 1); 2*s2*(q02*q32 + q12*q22); 2*s2*(-q02*q22 + q12*q32)];
   omega = [[0 0 -wy2 -wz2]; [0 0 wz2 -wy2]; [wy2 -wz2 0 0]; [wz2 wy2 0 0]];

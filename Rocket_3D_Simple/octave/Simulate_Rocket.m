@@ -1,6 +1,7 @@
 function O = Simulate_Rocket(O)
 
 A = 0.25;
+pi_AR_e = pi * 2.0 * 0.5;
 function knot_params = get_knot_params(z_knot, t_knot)
   gravity0 = 9.8065;
   Re = 6371e3;
@@ -82,7 +83,7 @@ function knot_params = get_knot_params(z_knot, t_knot)
 
   % Made up thrust mass tables to take us supersonic
   t_table = [0 0.2  0.5  2.5 3   3.25 4   6   8  10  11  12   13 13.5];
-  T_table = [0 300 1000 1000 800 600 550 525 500 450 350 250 100 0];
+  T_table = 30.*[0 300 1000 1000 800 600 550 525 500 450 350 250 100 0];
   m_table = [15 14.92 14.52 11.8533 11.32 11.12 10.57 9.17 7.8367 6.6367 6.17 5.8367 5.7033 5.7033];
   if t_knot >= t_table(end)
     knot_params.T = T_table(end);
@@ -107,7 +108,7 @@ function [dx, w] = get_dx(z_knot, knot_params)
 
   q = [q0 q1 q2 q3];
 
-  D = 0.5*knot_params.rho*A*knot_params.c_D*s*s;
+  D = 0.5*knot_params.rho*A*(knot_params.c_D + (c_L^2/pi_AR_e))*s*s;
   az = 0.5*knot_params.rho*A*cos(sig)*c_L*s*s/knot_params.m;
   ay = 0.5*knot_params.rho*A*sin(sig)*c_L*s*s/knot_params.m;
 
